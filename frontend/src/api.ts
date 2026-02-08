@@ -18,6 +18,8 @@ export interface LastChange {
   state?: string
   last_changed?: string
   friendly_name?: string
+  previous_state?: string
+  previous_duration_sec?: number
 }
 
 async function request<T>(path: string): Promise<T> {

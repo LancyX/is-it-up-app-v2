@@ -33,6 +33,13 @@ export function LastChangeCard({ lastChange }: LastChangeCardProps) {
 
   const isOn = lastChange.state?.toLowerCase() === 'on'
 
+  const formatDuration = (seconds: number) => {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    if (h > 0) return `${h} ${t('units.h')} ${m} ${t('units.m')}`
+    return `${m} ${t('units.m')}`
+  }
+
   return (
     <section className="card">
       <span className="card-label">{t('lastChange.label')}</span>
@@ -40,6 +47,11 @@ export function LastChangeCard({ lastChange }: LastChangeCardProps) {
       <p className="last-change-state" data-state={isOn ? 'on' : 'off'}>
         {t('lastChange.switchedTo')} {isOn ? t('state.on') : t('state.off')}
       </p>
+      {lastChange.previous_duration_sec !== undefined && (
+        <p className="last-change-duration text-muted" style={{ fontSize: '0.9em', marginTop: 4 }}>
+          {t('lastChange.was')} {lastChange.previous_state === 'on' ? t('state.on') : t('state.off')} {t('lastChange.for')} {formatDuration(lastChange.previous_duration_sec)}
+        </p>
+      )}
     </section>
   )
 }

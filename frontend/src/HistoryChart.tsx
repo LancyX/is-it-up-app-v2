@@ -78,8 +78,7 @@ export function HistoryChart({ history, currentState }: HistoryChartProps) {
     )
   }
 
-  // Enough width for Ukrainian "Увімкнено" / "Вимкнено" so labels aren't clipped
-  const yAxisWidth = locale === 'uk' ? 92 : 36
+  const yAxisWidth = 36
 
   return (
     <div className="chart-wrap">

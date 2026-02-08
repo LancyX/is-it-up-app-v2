@@ -104,7 +104,7 @@ export function HistoryChart({ history, currentState }: HistoryChartProps) {
           <YAxis
             domain={[0, 1]}
             ticks={[0, 1]}
-            tickFormatter={(v) => (v === 1 ? t('state.on') : t('state.off'))}
+            tickFormatter={(v) => (v === 1 ? t('state.on_history') : t('state.off_history'))}
             tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
             stroke="var(--border)"
             width={yAxisWidth}

@@ -1,4 +1,5 @@
 import type { LastChange } from './api'
+import { formatDuration } from './utils'
 import { useTranslations } from './i18n'
 import type { Locale } from './i18n'
 
@@ -33,12 +34,7 @@ export function LastChangeCard({ lastChange }: LastChangeCardProps) {
 
   const isOn = lastChange.state?.toLowerCase() === 'on'
 
-  const formatDuration = (seconds: number) => {
-    const h = Math.floor(seconds / 3600)
-    const m = Math.floor((seconds % 3600) / 60)
-    if (h > 0) return `${h} ${t('units.h')} ${m} ${t('units.m')}`
-    return `${m} ${t('units.m')}`
-  }
+
 
   return (
     <section className="card">
@@ -49,7 +45,7 @@ export function LastChangeCard({ lastChange }: LastChangeCardProps) {
       </p>
       {lastChange.previous_duration_sec !== undefined && (
         <p className="last-change-duration text-muted" style={{ fontSize: '0.9em', marginTop: 4 }}>
-          {t('lastChange.was')} {lastChange.previous_state === 'on' ? t('state.on') : t('state.off')} {t('lastChange.for')} {formatDuration(lastChange.previous_duration_sec)}
+          {t('lastChange.was')} {lastChange.previous_state === 'on' ? t('state.on') : t('state.off')} {t('lastChange.for')} {formatDuration(lastChange.previous_duration_sec, t)}
         </p>
       )}
     </section>

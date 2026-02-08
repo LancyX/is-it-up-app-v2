@@ -1,9 +1,11 @@
 export type Locale = 'en' | 'uk'
 
+const APP_SUBTITLE = import.meta.env.VITE_APP_SUBTITLE || 'м.Вишневе, Сади Вишневі, вул. Машинобудівників'
+
 const translations: Record<Locale, Record<string, string>> = {
   en: {
     'app.title': 'Is It Up',
-    'app.subtitle': 'м.Вишневе, Сади Вишневі, вул. Машинобудівників',
+    'app.subtitle': APP_SUBTITLE,
     'theme.light': 'Light mode',
     'theme.dark': 'Dark mode',
     'state.current': 'Current state',
@@ -37,7 +39,7 @@ const translations: Record<Locale, Record<string, string>> = {
   },
   uk: {
     'app.title': 'Чи є світло',
-    'app.subtitle': 'м.Вишневе, Сади Вишневі, вул. Машинобудівників',
+    'app.subtitle': APP_SUBTITLE,
     'theme.light': 'Світла тема',
     'theme.dark': 'Темна тема',
     'state.current': 'Поточний стан',

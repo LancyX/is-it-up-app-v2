@@ -94,7 +94,12 @@ function App() {
                 <option value={48}>{t('history.hours48')}</option>
               </select>
             </div>
-            <HistoryChart history={history} currentState={state?.state} historyHours={historyHours} />
+            <HistoryChart
+              history={history}
+              currentState={state?.state}
+              lastChanged={state?.last_changed}
+              historyHours={historyHours}
+            />
           </section>
         </>
       )}

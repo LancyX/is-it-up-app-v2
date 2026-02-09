@@ -14,48 +14,18 @@ import type { Locale } from './i18n'
 
 interface HistoryChartProps {
   history: History | null
-  /** Current state so we can extend the chart to "now" (e.g. off since 19:03 → show off until 21:21) */
   currentState?: string | null
+  lastChanged?: string
 }
 
 const localeTag = (locale: Locale) => (locale === 'uk' ? 'uk-UA' : 'en')
 
-
-//   const tag = localeTag(locale)
-//   const sorted = [...history.history].sort(
-//     (a, b) => new Date(a.last_changed).getTime() - new Date(b.last_changed).getTime()
-//   )
-
-//   const points: Array<{ time: string; value: number; state: string }> = []
-//   for (let i = 0; i < sorted.length; i++) {
-//     const cur = sorted[i]
-//     const value = cur.state?.toLowerCase() === 'on' ? 1 : 0
-//     const time = new Date(cur.last_changed).toLocaleTimeString(tag, {
-//       hour: '2-digit',
-//       minute: '2-digit',
-//     })
-//     points.push({ time, value, state: cur.state ?? 'unknown' })
-//     if (i < sorted.length - 1) {
-//       const next = sorted[i + 1]
-//       const nextTime = new Date(next.last_changed).toLocaleTimeString(tag, {
-//         hour: '2-digit',
-//         minute: '2-digit',
-//       })
-//       points.push({ time: nextTime, value, state: cur.state ?? 'unknown' })
-//     }
-//   }
-
-//   if (currentState != null) {
-//     const now = new Date()
-//     const nowLabel = now.toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit' })
-//     const value = currentState.toLowerCase() === 'on' ? 1 : 0
-//     points.push({ time: nowLabel, value, state: currentState })
-//   }
-
-//   return points
-// }
-
-export function HistoryChart({ history, currentState, historyHours }: HistoryChartProps & { historyHours: number }) {
+export function HistoryChart({
+  history,
+  currentState,
+  lastChanged,
+  historyHours,
+}: HistoryChartProps & { historyHours: number }) {
   const { t, locale } = useTranslations()
 
   const data = useMemo(() => {
@@ -69,8 +39,8 @@ export function HistoryChart({ history, currentState, historyHours }: HistoryCha
 
     // We want the chart to start exactly at (now - historyHours).
     // If the first history point is before that, great.
-    // If the first history point is after that, we might want to assume 
-    // the state was the same as the first point (or unknown). 
+    // If the first history point is after that, we might want to assume
+    // the state was the same as the first point (or unknown).
     // For simplicity, let's just plot what we have, but set the XAxis domain fixed.
 
     for (let i = 0; i < sorted.length; i++) {
@@ -79,22 +49,18 @@ export function HistoryChart({ history, currentState, historyHours }: HistoryCha
       const time = new Date(cur.last_changed).getTime()
 
       points.push({ time, value: val, state: cur.state ?? 'unknown' })
+    }
 
-      if (i < sorted.length - 1) {
-        // stepAfter: the line stays horizontal until the next point
-        // So we just need the point. Recharts 'stepAfter' interpolation 
-        // will handle drawing the line to the right. 
-        // BUT: if we want a precise "step" visual where it drops/rises 
-        // exactly at the new time, 'stepAfter' does exactly that:
-        // from (t1, v1) horizontal to (t2, v1) then vertical to (t2, v2).
-        // So we don't strictly need to insert a duplicate point at t2 
-        // unless we were using 'monotone' or 'linear'. 
-        // The original code inserted a point. Let's stick to standard 
-        // 'stepAfter' behavior which doesn't need the extra point 
-        // IF the data is structured correctly.
-        // Actually, the original code inserted a point at nextTime with *current* value.
-        // That creates a step. 
-        // Let's rely on Recharts `type="stepAfter"` on the <Area>.
+    // Insert the transition to current state if it's missing from history
+    if (currentState != null && lastChanged) {
+      const lastChangedTime = new Date(lastChanged).getTime()
+      const lastPointIdx = points.length - 1
+      const lastPoint = points.length > 0 ? points[lastPointIdx] : null
+
+      // If we have no points, or the last point is before the current state change
+      if (!lastPoint || lastPoint.time < lastChangedTime) {
+        const val = currentState.toLowerCase() === 'on' ? 1 : 0
+        points.push({ time: lastChangedTime, value: val, state: currentState })
       }
     }
 
@@ -105,7 +71,7 @@ export function HistoryChart({ history, currentState, historyHours }: HistoryCha
     }
 
     return points
-  }, [history, currentState, locale]) // removed historyHours dependency as it doesn't affect *data* gen, only axis
+  }, [history, currentState, lastChanged, locale]) // removed historyHours dependency as it doesn't affect *data* gen, only axis
 
   if (data.length === 0) {
     return (

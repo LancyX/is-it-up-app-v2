@@ -1,6 +1,6 @@
 export type Locale = 'en' | 'uk'
 
-const APP_SUBTITLE = import.meta.env.VITE_APP_SUBTITLE || 'м.Вишневе, Сади Вишневі, вул. Машинобудівників'
+const APP_SUBTITLE = import.meta.env.VITE_APP_SUBTITLE || 'Subtitle for status page'
 
 const translations: Record<Locale, Record<string, string>> = {
   en: {

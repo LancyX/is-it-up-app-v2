@@ -17,6 +17,7 @@ services:
         VITE_CONTACT_EMAIL: ${VITE_CONTACT_EMAIL:-}
         VITE_GITHUB_REPO_URL: ${VITE_GITHUB_REPO_URL:-}
         VITE_BASE_PATH: ${VITE_BASE_PATH:-/}
+        VITE_APP_SUBTITLE: ${VITE_APP_SUBTITLE:-}
         VITE_API_BASE: ${VITE_API_BASE:-/api}
     ports:
       - "3033:80"

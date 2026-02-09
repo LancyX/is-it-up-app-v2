@@ -21,7 +21,7 @@ Pretty much fully AI genarated app, so can have issues. Made for fun, but can be
    docker compose up --build
    ```
 
-3. Open **http://localhost:3000** (frontend). The frontend proxies `/api` to the backend.
+3. Open **http://localhost:3033** (frontend). The frontend proxies `/api` to the backend.
 
 ### Env vars
 
@@ -65,14 +65,18 @@ npm install
 npm run dev
 ```
 
-Vite proxies `/api` to `http://localhost:8000`, so use **http://localhost:5173** and the app will call your local backend.
-
 ## API (backend)
 
 - `GET /health` – health check
 - `GET /api/state` – current state of the grid entity
-- `GET /api/history?hours=24` – state change history (1–168 hours)
+- `GET /api/history?hours=24` – state change history (1–48 hours)
 - `GET /api/last-change` – last on/off change time and state
+
+## Page example
+
+![Frontend-light](docs/frontend-light.png)
+
+![Frontend-dark](docs/frontend-dark.png)
 
 ## Tech stack
 

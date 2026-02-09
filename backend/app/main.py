@@ -65,8 +65,8 @@ async def get_state():
 @app.get("/api/history")
 async def get_history(hours: int = 24):
     """State change history for the grid entity (time series for chart)."""
-    if hours < 1 or hours > 168:
-        raise HTTPException(status_code=400, detail="hours must be between 1 and 168")
+    if hours not in [6, 12, 24, 48]:
+        raise HTTPException(status_code=400, detail="hours must be one of: 6, 12, 24, 48")
     try:
         data = await run_sync(ha_client.get_history, hours)
         return {

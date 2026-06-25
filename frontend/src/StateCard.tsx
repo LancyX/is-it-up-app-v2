@@ -35,9 +35,12 @@ export function StateCard({ state }: StateCardProps) {
   return (
     <section className="card state-card">
       <span className="card-label">{t('state.current')}</span>
-      <p className="state-value" data-state={isOn ? 'on' : 'off'}>
-        {isOn ? t('state.on') : t('state.off')}
-      </p>
+      <div className="state-value-container">
+        <span className={`status-pulse-dot ${isOn ? 'on' : 'off'}`} />
+        <p className="state-value" data-state={isOn ? 'on' : 'off'}>
+          {isOn ? t('state.on') : t('state.off')}
+        </p>
+      </div>
       {duration && (
         <p className="state-duration text-muted" style={{ fontSize: '0.9em', marginTop: 4 }}>
           {t('lastChange.for')} {duration}

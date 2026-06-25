@@ -14,7 +14,7 @@ const GITHUB_REPO_URL = import.meta.env.VITE_GITHUB_REPO_URL ?? ''
 
 function App() {
   const { theme, toggleTheme } = useTheme()
-  const { t } = useTranslations()
+  const { t, locale, setLocale } = useTranslations()
   const [state, setState] = useState<State | null>(null)
   const [history, setHistory] = useState<History | null>(null)
   const [lastChange, setLastChange] = useState<LastChange | null>(null)
@@ -53,17 +53,30 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>{t('app.title')}</h1>
-        <p className="subtitle">{t('app.subtitle')}</p>
-        <button
-          type="button"
-          className="theme-toggle"
-          onClick={toggleTheme}
-          title={theme === 'dark' ? t('theme.light') : t('theme.dark')}
-          aria-label={theme === 'dark' ? t('theme.light') : t('theme.dark')}
-        >
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
+        <div className="header-main">
+          <h1>{t('app.title')}</h1>
+          <p className="subtitle">{t('app.subtitle')}</p>
+        </div>
+        <div className="header-actions">
+          <button
+            type="button"
+            className="lang-toggle"
+            onClick={() => setLocale(locale === 'en' ? 'uk' : 'en')}
+            title={locale === 'en' ? 'Switch to Ukrainian' : 'Перемкнути на англійську'}
+            aria-label={locale === 'en' ? 'Switch to Ukrainian' : 'Перемкнути на англійську'}
+          >
+            {locale === 'en' ? '🇺🇦 UA' : '🇬🇧 EN'}
+          </button>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? t('theme.light') : t('theme.dark')}
+            aria-label={theme === 'dark' ? t('theme.light') : t('theme.dark')}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
       </header>
 
       {loading && !state && (
@@ -78,8 +91,10 @@ function App() {
 
       {state && (
         <>
-          <StateCard state={state} />
-          <LastChangeCard lastChange={lastChange} />
+          <div className="cards-grid">
+            <StateCard state={state} />
+            <LastChangeCard lastChange={lastChange} />
+          </div>
           <section className="chart-section">
             <div className="chart-header">
               <h2>{t('history.title')}</h2>
@@ -92,6 +107,8 @@ function App() {
                 <option value={12}>{t('history.hours12')}</option>
                 <option value={24}>{t('history.hours24')}</option>
                 <option value={48}>{t('history.hours48')}</option>
+                <option value={72}>{t('history.days3')}</option>
+                <option value={168}>{t('history.days7')}</option>
               </select>
             </div>
             <HistoryChart

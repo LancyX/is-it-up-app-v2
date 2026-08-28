@@ -124,7 +124,9 @@ export function HistoryChart({
 
     let totalOnTime = 0
     let totalOffTime = 0
-    let outageCount = 0
+    // An outage already in progress when the visible range starts has no 'on' -> 'off'
+    // transition inside `data` to count it, so count that leading segment as one outage too.
+    let outageCount = data[0].state.toLowerCase() === 'off' ? 1 : 0
 
     for (let i = 0; i < data.length - 1; i++) {
       const cur = data[i]
@@ -155,7 +157,11 @@ export function HistoryChart({
     }
   }, [data, minTime, now])
 
-  if (data.length <= 1) {
+  // `data` always has >= 2 points (boundary points at minTime/now are synthesized above
+  // even with no real history), so check the actual source data for the empty state.
+  const hasData = (history?.history?.length ?? 0) > 0 || currentState != null
+
+  if (!hasData) {
     return (
       <div className="chart-empty">
         {t('history.empty')}

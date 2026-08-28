@@ -69,7 +69,7 @@ npm run dev
 
 - `GET /health` – health check
 - `GET /api/state` – current state of the grid entity
-- `GET /api/history?hours=24` – state change history (1–48 hours)
+- `GET /api/history?hours=24` – state change history (one of: 6, 12, 24, 48, 72, 168)
 - `GET /api/last-change` – last on/off change time and state
 
 ## Page example

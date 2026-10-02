@@ -46,13 +46,13 @@ def _fetch_history_period(start: datetime, end: datetime) -> list[dict[str, Any]
     return data[0]
 
 
-def get_history(hours: int = 24) -> list[dict[str, Any]]:
-    """Fetch state history for the grid entity. Returns list of state changes."""
+def get_history(hours: int = 24) -> tuple[datetime, list[dict[str, Any]]]:
+    """Fetch state history for the grid entity. Returns (requested start, list of state changes)."""
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=hours)
     # We do NOT filter the result by start_ts because HA returns the "initial state"
-    # as the first element, often with a timestamp < start_ts. We need this!
-    return _fetch_history_period(start, end)
+    # as the first element, with its timestamp clamped to start_ts. We need this!
+    return start, _fetch_history_period(start, end)
 
 
 def _parse_ts(iso_str: str) -> float:
@@ -93,10 +93,15 @@ def get_last_change() -> dict[str, Any] | None:
             ]
 
             if valid_history:
-                # The last valid item is the start of the previous state
+                # The previous state started at the earliest item of the trailing run with
+                # that same state (HA can record repeated items with an unchanged state)
+                prev_state = valid_history[-1].get("state")
                 prev = valid_history[-1]
+                for h in reversed(valid_history):
+                    if h.get("state") != prev_state:
+                        break
+                    prev = h
                 prev_ts_str = prev.get("last_changed") or prev.get("last_updated")
-                prev_state = prev.get("state")
 
                 if prev_ts_str:
                     prev_ts = datetime.fromisoformat(prev_ts_str.replace("Z", "+00:00"))

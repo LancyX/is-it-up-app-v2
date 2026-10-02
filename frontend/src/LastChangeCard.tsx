@@ -1,5 +1,5 @@
 import type { LastChange } from './api'
-import { formatDuration } from './utils'
+import { formatDuration, normalizeState } from './utils'
 import { useTranslations } from './i18n'
 import type { Locale } from './i18n'
 
@@ -32,20 +32,18 @@ export function LastChangeCard({ lastChange }: LastChangeCardProps) {
     )
   }
 
-  const isOn = lastChange.state?.toLowerCase() === 'on'
-
-
+  const gridState = normalizeState(lastChange.state)
 
   return (
     <section className="card">
       <span className="card-label">{t('lastChange.label')}</span>
       <p className="last-change-time">{formatTime(lastChange.last_changed, locale)}</p>
-      <p className="last-change-state" data-state={isOn ? 'on' : 'off'}>
-        {t('lastChange.switchedTo')} {isOn ? t('state.on') : t('state.off')}
+      <p className="last-change-state" data-state={gridState}>
+        {t('lastChange.switchedTo')} {t(`state.${gridState}`)}
       </p>
       {lastChange.previous_duration_sec !== undefined && (
         <p className="last-change-duration text-muted" style={{ fontSize: '0.9em', marginTop: 4 }}>
-          {t('lastChange.was')} {lastChange.previous_state === 'on' ? t('state.on') : t('state.off')} {t('lastChange.for')} {formatDuration(lastChange.previous_duration_sec, t)}
+          {t('lastChange.was')} {t(`state.${normalizeState(lastChange.previous_state)}`)} {t('lastChange.for')} {formatDuration(lastChange.previous_duration_sec, t)}
         </p>
       )}
     </section>

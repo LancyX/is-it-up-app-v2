@@ -7,11 +7,16 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  ReferenceArea,
 } from 'recharts'
 import type { History } from './api'
 import { useTranslations } from './i18n'
 import type { Locale } from './i18n'
-import { formatDuration } from './utils'
+import { formatDuration, normalizeState } from './utils'
+import type { GridState } from './utils'
+
+const stateColor = (state: GridState) =>
+  state === 'on' ? 'var(--on)' : state === 'off' ? 'var(--off)' : 'var(--text-muted)'
 
 interface HistoryChartProps {
   history: History | null
@@ -32,130 +37,147 @@ export function HistoryChart({
   const now = Date.now()
   const minTime = now - historyHours * 60 * 60 * 1000
 
-  // 1. Generate boundary-aligned timeline points
-  const data = useMemo(() => {
+  // 1. Generate boundary-aligned timeline: each point starts a segment lasting until the next point
+  const timeline = useMemo(() => {
     const sortedRaw = history?.history
       ? [...history.history]
           .map((h) => ({
             time: new Date(h.last_changed).getTime(),
-            state: h.state ?? 'unknown',
+            state: normalizeState(h.state),
           }))
           .sort((a, b) => a.time - b.time)
       : []
 
-    const points: Array<{ time: number; value: number; state: string }> = []
+    const points: Array<{ time: number; state: GridState }> = []
+
+    // HA returns the state at the requested start as the first item, stamped exactly at that
+    // start. Use the server's start too, so client clock skew can't push that item into range.
+    const serverStart = history?.start ? new Date(history.start).getTime() : NaN
+    const startCutoff = Number.isNaN(serverStart) ? minTime : Math.max(minTime, serverStart)
 
     // Filter points in range to analyze state at minTime
-    const pointsBefore = sortedRaw.filter((p) => p.time <= minTime)
-    const pointsAfter = sortedRaw.filter((p) => p.time > minTime && p.time < now)
+    const pointsBefore = sortedRaw.filter((p) => p.time <= startCutoff)
+    const pointsAfter = sortedRaw.filter((p) => p.time > startCutoff && p.time < now)
+    const lastChangedTime = lastChanged ? new Date(lastChanged).getTime() : NaN
 
-    let stateAtMin = 'unknown'
+    // If HA has no record that old (e.g. the entity was recreated), keep that stretch as
+    // 'unknown' rather than guessing it from the first later point.
+    let stateAtMin: GridState = 'unknown'
     if (pointsBefore.length > 0) {
       stateAtMin = pointsBefore[pointsBefore.length - 1].state
-    } else if (pointsAfter.length > 0) {
-      stateAtMin = pointsAfter[0].state
-    } else if (currentState != null) {
-      stateAtMin = currentState
+    } else if (currentState != null && lastChangedTime <= startCutoff) {
+      stateAtMin = normalizeState(currentState)
     }
 
     // Prepend point at minTime
-    const valAtMin = stateAtMin.toLowerCase() === 'on' ? 1 : 0
-    points.push({ time: minTime, value: valAtMin, state: stateAtMin })
+    points.push({ time: minTime, state: stateAtMin })
 
     // Add all middle points
-    for (const p of pointsAfter) {
-      const val = p.state.toLowerCase() === 'on' ? 1 : 0
-      points.push({ time: p.time, value: val, state: p.state })
-    }
+    points.push(...pointsAfter)
 
     // Insert current state change if missing
     if (currentState != null && lastChanged) {
-      const lastChangedTime = new Date(lastChanged).getTime()
-      const lastPoint = points.length > 0 ? points[points.length - 1] : null
-      if (lastChangedTime > minTime && lastChangedTime < now && (!lastPoint || lastPoint.time < lastChangedTime)) {
-        const val = currentState.toLowerCase() === 'on' ? 1 : 0
-        points.push({ time: lastChangedTime, value: val, state: currentState })
+      const lastPoint = points[points.length - 1]
+      if (lastChangedTime > minTime && lastChangedTime < now && lastPoint.time < lastChangedTime) {
+        points.push({ time: lastChangedTime, state: normalizeState(currentState) })
       }
     }
 
     // Append point at now
-    const lastVal = currentState != null ? (currentState.toLowerCase() === 'on' ? 1 : 0) : valAtMin
-    const lastState = currentState ?? stateAtMin
-    points.push({ time: now, value: lastVal, state: lastState })
+    const lastState = currentState != null ? normalizeState(currentState) : points[points.length - 1].state
+    points.push({ time: now, state: lastState })
 
     return points
   }, [history, currentState, lastChanged, minTime, now])
 
+  // 'unknown' is plotted at 0 but made invisible via the gradient. Don't use null gaps: the
+  // gradients are sized to the line's bounding box, so the line must span the full range.
+  const data = useMemo(
+    () => timeline.map((p) => ({ ...p, value: p.state === 'on' ? 1 : 0 })),
+    [timeline],
+  )
+
+  const unknownRanges = useMemo(() => {
+    const ranges: Array<{ x1: number; x2: number }> = []
+    for (let i = 0; i < timeline.length - 1; i++) {
+      if (timeline[i].state !== 'unknown') continue
+      const last = ranges[ranges.length - 1]
+      if (last && last.x2 === timeline[i].time) last.x2 = timeline[i + 1].time
+      else ranges.push({ x1: timeline[i].time, x2: timeline[i + 1].time })
+    }
+    return ranges
+  }, [timeline])
+
   // 2. Compute dynamic SVG horizontal gradient stops based on timeline
   const gradientStops = useMemo(() => {
-    if (data.length === 0) return []
+    if (timeline.length === 0) return []
     const total = now - minTime
     if (total <= 0) return []
 
-    const stops: Array<{ offset: string; color: string }> = []
+    const stops: Array<{ offset: string; color: string; state: GridState }> = []
 
-    for (let i = 0; i < data.length - 1; i++) {
-      const cur = data[i]
-      const next = data[i + 1]
+    for (let i = 0; i < timeline.length - 1; i++) {
+      const cur = timeline[i]
+      const next = timeline[i + 1]
 
       const startPct = Math.max(0, Math.min(100, ((cur.time - minTime) / total) * 100))
       const endPct = Math.max(0, Math.min(100, ((next.time - minTime) / total) * 100))
 
-      const color = cur.state.toLowerCase() === 'on' ? 'var(--on)' : 'var(--off)'
+      const color = stateColor(cur.state)
 
-      stops.push({ offset: `${startPct.toFixed(2)}%`, color })
-      stops.push({ offset: `${endPct.toFixed(2)}%`, color })
+      stops.push({ offset: `${startPct.toFixed(2)}%`, color, state: cur.state })
+      stops.push({ offset: `${endPct.toFixed(2)}%`, color, state: cur.state })
     }
 
-    if (data.length > 0) {
-      const last = data[data.length - 1]
-      const startPct = Math.max(0, Math.min(100, ((last.time - minTime) / total) * 100))
-      const color = last.state.toLowerCase() === 'on' ? 'var(--on)' : 'var(--off)'
-      stops.push({ offset: `${startPct.toFixed(2)}%`, color })
-      stops.push({ offset: '100%', color })
-    }
+    const last = timeline[timeline.length - 1]
+    const startPct = Math.max(0, Math.min(100, ((last.time - minTime) / total) * 100))
+    const color = stateColor(last.state)
+    stops.push({ offset: `${startPct.toFixed(2)}%`, color, state: last.state })
+    stops.push({ offset: '100%', color, state: last.state })
 
     return stops
-  }, [data, minTime, now])
+  }, [timeline, minTime, now])
 
-  // 3. Compute statistics
+  // 3. Compute statistics (only over time with known state)
   const stats = useMemo(() => {
-    if (data.length < 2) return null
+    if (timeline.length < 2) return null
 
     let totalOnTime = 0
     let totalOffTime = 0
-    // An outage already in progress when the visible range starts has no 'on' -> 'off'
-    // transition inside `data` to count it, so count that leading segment as one outage too.
-    let outageCount = data[0].state.toLowerCase() === 'off' ? 1 : 0
+    let totalUnknownTime = 0
+    let outageCount = 0
+    // Count an outage whenever 'off' starts after a known non-'off' state, or as the first known
+    // state (an outage already in progress). Brief 'unavailable' blips inside an outage
+    // (off -> unavailable -> off) must not count it twice.
+    let prevKnown: GridState | null = null
 
-    for (let i = 0; i < data.length - 1; i++) {
-      const cur = data[i]
-      const next = data[i + 1]
-      const duration = next.time - cur.time
+    for (let i = 0; i < timeline.length; i++) {
+      const cur = timeline[i]
+      const next = timeline[i + 1]
+      const duration = next ? next.time - cur.time : 0
 
-      if (cur.state.toLowerCase() === 'on') {
-        totalOnTime += duration
-      } else if (cur.state.toLowerCase() === 'off') {
-        totalOffTime += duration
-      }
+      if (cur.state === 'on') totalOnTime += duration
+      else if (cur.state === 'off') totalOffTime += duration
+      else totalUnknownTime += duration
 
-      if (cur.state.toLowerCase() === 'on' && next.state.toLowerCase() === 'off') {
-        outageCount++
-      }
+      if (cur.state === 'off' && prevKnown !== 'off') outageCount++
+      if (cur.state !== 'unknown') prevKnown = cur.state
     }
 
-    const totalDuration = now - minTime
-    const uptimePercentage = totalDuration > 0 ? (totalOnTime / totalDuration) * 100 : 0
+    const knownDuration = totalOnTime + totalOffTime
+    if (knownDuration <= 0) return null
+    const uptimePercentage = (totalOnTime / knownDuration) * 100
     const avgOutageDuration = outageCount > 0 ? totalOffTime / outageCount : 0
 
     return {
       uptimePercentage,
       totalOnSec: Math.floor(totalOnTime / 1000),
       totalOffSec: Math.floor(totalOffTime / 1000),
+      totalUnknownSec: Math.floor(totalUnknownTime / 1000),
       outageCount,
       avgOutageSec: Math.floor(avgOutageDuration / 1000),
     }
-  }, [data, minTime, now])
+  }, [timeline])
 
   // `data` always has >= 2 points (boundary points at minTime/now are synthesized above
   // even with no real history), so check the actual source data for the empty state.
@@ -221,7 +243,11 @@ export function HistoryChart({
           <div className="stat-badge">
             <span className="stat-label">{t('stats.offline')}</span>
             <span className="stat-val">{formatDuration(stats.totalOffSec, t)}</span>
-            <span className="stat-sub">{t('history.title')}</span>
+            <span className="stat-sub">
+              {stats.totalUnknownSec >= 60
+                ? `${t('history.no_data')}: ${formatDuration(stats.totalUnknownSec, t)}`
+                : t('history.title')}
+            </span>
           </div>
 
           <div className="stat-badge">
@@ -239,13 +265,17 @@ export function HistoryChart({
           <defs>
             <linearGradient id={`line-${uniqueId}`} x1="0" y1="0" x2="1" y2="0">
               {gradientStops.map((s, idx) => (
-                <stop key={idx} offset={s.offset} stopColor={s.color} />
+                <stop
+                  key={idx}
+                  offset={s.offset}
+                  stopColor={s.color}
+                  stopOpacity={s.state === 'unknown' ? 0 : 1}
+                />
               ))}
             </linearGradient>
             <linearGradient id={`fill-${uniqueId}`} x1="0" y1="0" x2="1" y2="0">
               {gradientStops.map((s, idx) => {
-                const isOn = s.color === 'var(--on)'
-                const opacity = isOn ? 0.15 : 0.02
+                const opacity = s.state === 'on' ? 0.15 : s.state === 'off' ? 0.02 : 0
                 return (
                   <stop key={idx} offset={s.offset} stopColor={s.color} stopOpacity={opacity} />
                 )
@@ -253,6 +283,22 @@ export function HistoryChart({
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          {unknownRanges.map((r) => (
+            <ReferenceArea
+              key={r.x1}
+              x1={r.x1}
+              x2={r.x2}
+              fill="var(--text-muted)"
+              fillOpacity={0.08}
+              stroke="none"
+              ifOverflow="hidden"
+              label={
+                r.x2 - r.x1 >= (now - minTime) * 0.15
+                  ? { value: t('history.no_data'), fill: 'var(--text-muted)', fontSize: 11 }
+                  : undefined
+              }
+            />
+          ))}
           <XAxis
             dataKey="time"
             type="number"
@@ -275,14 +321,14 @@ export function HistoryChart({
               if (active && payload && payload.length) {
                 const dataPoint = payload[0].payload
                 const formattedTime = formatTime(dataPoint.time)
-                const isPointOn = dataPoint.state.toLowerCase() === 'on'
+                const pointState: GridState = dataPoint.state
                 return (
                   <div className="custom-tooltip">
                     <p className="tooltip-time">{formattedTime}</p>
                     <div className="tooltip-row">
-                      <span className={`tooltip-dot ${isPointOn ? 'on' : 'off'}`} />
+                      <span className={`tooltip-dot ${pointState}`} />
                       <span className="tooltip-value">
-                        {isPointOn ? t('state.on') : t('state.off')}
+                        {pointState === 'unknown' ? t('history.no_data') : t(`state.${pointState}`)}
                       </span>
                     </div>
                   </div>

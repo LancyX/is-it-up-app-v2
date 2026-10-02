@@ -1,6 +1,6 @@
 import type { State } from './api'
 import { useState, useEffect } from 'react'
-import { formatDuration } from './utils'
+import { formatDuration, normalizeState } from './utils'
 import { useTranslations } from './i18n'
 
 interface StateCardProps {
@@ -28,7 +28,7 @@ export function StateCard({ state }: StateCardProps) {
     return () => clearInterval(interval)
   }, [state.last_changed, t])
 
-  const isOn = state.state?.toLowerCase() === 'on'
+  const gridState = normalizeState(state.state)
   // const rawLabel = state.attributes?.friendly_name ?? state.entity_id ?? 'Grid'
   // const label = typeof rawLabel === 'string' ? rawLabel : 'Grid'
 
@@ -36,9 +36,9 @@ export function StateCard({ state }: StateCardProps) {
     <section className="card state-card">
       <span className="card-label">{t('state.current')}</span>
       <div className="state-value-container">
-        <span className={`status-pulse-dot ${isOn ? 'on' : 'off'}`} />
-        <p className="state-value" data-state={isOn ? 'on' : 'off'}>
-          {isOn ? t('state.on') : t('state.off')}
+        <span className={`status-pulse-dot ${gridState}`} />
+        <p className="state-value" data-state={gridState}>
+          {t(`state.${gridState}`)}
         </p>
       </div>
       {duration && (

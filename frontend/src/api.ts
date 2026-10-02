@@ -11,6 +11,7 @@ export interface State {
 
 export interface History {
   entity_id?: string
+  start?: string
   history: Array<{ state: string; last_changed: string }>
 }
 

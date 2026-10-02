@@ -147,6 +147,10 @@
   color: var(--off);
 }
 
+.state-value[data-state="unknown"] {
+  color: var(--text-muted);
+}
+
 .status-pulse-dot {
   width: 14px;
   height: 14px;
@@ -163,6 +167,10 @@
 .status-pulse-dot.off {
   background-color: var(--off);
   box-shadow: 0 0 10px var(--off);
+}
+
+.status-pulse-dot.unknown {
+  background-color: var(--text-muted);
 }
 
 .status-pulse-dot::after {
@@ -457,6 +465,10 @@
 .tooltip-dot.off {
   background-color: var(--off);
   box-shadow: 0 0 6px var(--off);
+}
+
+.tooltip-dot.unknown {
+  background-color: var(--text-muted);
 }
 
 .tooltip-value {

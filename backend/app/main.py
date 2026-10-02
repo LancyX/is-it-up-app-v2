@@ -16,7 +16,7 @@ _executor = ThreadPoolExecutor(max_workers=2)
 
 
 async def run_sync(fn, *args, **kwargs):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_executor, lambda: fn(*args, **kwargs))
 
 
@@ -68,9 +68,12 @@ async def get_history(hours: int = 24):
     if hours not in [6, 12, 24, 48, 72, 168]:
         raise HTTPException(status_code=400, detail="hours must be one of: 6, 12, 24, 48, 72, 168")
     try:
-        data = await run_sync(ha_client.get_history, hours)
+        start, data = await run_sync(ha_client.get_history, hours)
         return {
             "entity_id": settings.grid_entity_id,
+            # Lets the client recognise HA's initial-state item (stamped exactly at start)
+            # even if the client clock differs from the server's.
+            "start": start.isoformat(),
             "history": [
                 {
                     "state": h.get("state"),

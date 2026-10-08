@@ -62,54 +62,53 @@ def _parse_ts(iso_str: str) -> float:
         return 0.0
 
 
+KNOWN_STATES = ("on", "off")
+
+
 def get_last_change() -> dict[str, Any] | None:
-    """Get the most recent state change (on/off) time from current state."""
+    """Get the most recent real on/off change and the period before it.
+
+    'unavailable'/'unknown' readings are ignored, so off -> unavailable -> off is one continuous
+    'off' period (same rule as the history chart). HA's own last_changed resets on every such
+    blip, so it's only used as a fallback.
+    """
     state = get_current_state()
     last_changed = state.get("last_changed") or state.get("last_updated")
     if not last_changed:
         return None
-    
+
     result = {
         "state": state.get("state", "unknown"),
         "last_changed": last_changed,
         "friendly_name": state.get("attributes", {}).get("friendly_name"),
     }
 
-    # Try to find the previous state to calculate duration.
-    # Look back as far as the longest history range the chart offers (MAX_HISTORY_HOURS),
-    # so a long-running outage doesn't silently disappear from this card.
+    # Look back twice the longest chart range (MAX_HISTORY_HOURS), so the previous period is
+    # still found when the current one has lasted up to that long.
     try:
-        current_start = datetime.fromisoformat(last_changed.replace("Z", "+00:00"))
-        search_start = current_start - timedelta(hours=MAX_HISTORY_HOURS)
-        history_list = _fetch_history_period(search_start, current_start)
+        end = datetime.now(timezone.utc)
+        history_list = _fetch_history_period(end - timedelta(hours=2 * MAX_HISTORY_HOURS), end)
+        items = [(h.get("state"), h.get("last_changed") or h.get("last_updated")) for h in history_list]
+        # The current state may be newer than the history snapshot
+        if not items or _parse_ts(last_changed) > _parse_ts(items[-1][1] or ""):
+            items.append((state.get("state"), last_changed))
 
-        if history_list:
-            # Filter out changes that happened AT or AFTER the current state change
-            # (HA might return the transition to current state as the last item)
-            current_ts = current_start.timestamp()
-            valid_history = [
-                h for h in history_list
-                if _parse_ts(h.get("last_changed") or h.get("last_updated")) < current_ts - 1.0  # 1s buffer
-            ]
+        # Collapse into runs of consecutive known states: [(state, run start)]
+        runs: list[tuple[str, str]] = []
+        for item_state, ts in items:
+            if item_state not in KNOWN_STATES or not ts:
+                continue
+            if not runs or runs[-1][0] != item_state:
+                runs.append((item_state, ts))
 
-            if valid_history:
-                # The previous state started at the earliest item of the trailing run with
-                # that same state (HA can record repeated items with an unchanged state)
-                prev_state = valid_history[-1].get("state")
-                prev = valid_history[-1]
-                for h in reversed(valid_history):
-                    if h.get("state") != prev_state:
-                        break
-                    prev = h
-                prev_ts_str = prev.get("last_changed") or prev.get("last_updated")
-
-                if prev_ts_str:
-                    prev_ts = datetime.fromisoformat(prev_ts_str.replace("Z", "+00:00"))
-                    duration_sec = (current_start - prev_ts).total_seconds()
-                    result["previous_state"] = prev_state
-                    result["previous_duration_sec"] = duration_sec
+        if runs:
+            result["state"], result["last_changed"] = runs[-1]
+        if len(runs) >= 2:
+            prev_state, prev_ts = runs[-2]
+            result["previous_state"] = prev_state
+            result["previous_duration_sec"] = _parse_ts(runs[-1][1]) - _parse_ts(prev_ts)
     except Exception:
-        # Ignore errors in fetching previous state, it's optional
+        # Fall back to HA's raw current state; the previous period is optional
         pass
 
     return result

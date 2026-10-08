@@ -92,7 +92,14 @@ function App() {
       {state && (
         <>
           <div className="cards-grid">
-            <StateCard state={state} />
+            <StateCard
+              state={
+                // The backend's last change ignores 'unavailable' blips; HA's raw last_changed doesn't
+                lastChange?.state && lastChange.last_changed
+                  ? { ...state, state: lastChange.state, last_changed: lastChange.last_changed }
+                  : state
+              }
+            />
             <LastChangeCard lastChange={lastChange} />
           </div>
           <section className="chart-section">

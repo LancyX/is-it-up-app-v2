@@ -33,7 +33,7 @@ docker compose up --build
 - `/api/history/period/<start>` defaults `end_time` to start + 1 day — always pass `end_time`.
 - HA returns the state at `start` as the first item, with `last_changed` clamped to exactly `start`. The backend returns that `start` in `/api/history`, and the chart uses it (not the browser clock) to recognise that item.
 - If the first item is later than `start`, HA has no older record (purged, or the entity was recreated, e.g. after deleting/re-adding a template helper). The chart shows that stretch as "no data" — never guess it from the next state.
-- States other than `on`/`off` (`unavailable`, `unknown`) are normalised to `'unknown'` via `normalizeState`. The cards show them as grey "Unavailable"; in the chart and stats they carry the previous known state forward (off → unavailable → off is one outage), and only a stretch with no earlier known state stays "no data".
+- States other than `on`/`off` (`unavailable`, `unknown`) are normalised to `'unknown'` via `normalizeState`. They carry the previous known state forward (off → unavailable → off is one outage): in the chart/stats (`HistoryChart.tsx`) and in both cards (`get_last_change` in `ha_client.py` collapses history into on/off runs; `App.tsx` feeds its state/time to `StateCard`). HA's raw `last_changed` resets on every such blip, so don't use it for durations. Only a stretch with no earlier known state shows as "no data" / grey "Unavailable".
 - History retention is HA's recorder setting (`purge_keep_days`, default 10), not something this app controls.
 
 ## Conventions

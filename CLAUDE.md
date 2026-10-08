@@ -6,13 +6,13 @@ Single-page status app showing a Home Assistant binary sensor (grid power: on/of
 
 - `backend/` — FastAPI (Poetry, Python 3.11+). Thin proxy over the HA REST API; HA token never reaches the browser.
   - `app/ha_client.py` — sync `httpx` calls to HA (`/api/states/<id>`, `/api/history/period/<start>`). Run from async routes via a thread pool (`run_sync` in `main.py`).
-  - `app/main.py` — routes: `/health`, `/api/state`, `/api/history?hours=N`, `/api/last-change`.
+  - `app/main.py` — routes: `/health`, `/api/state`, `/api/history?hours=N` or `?start=…[&end=…]`, `/api/last-change`.
   - `app/config.py` — `pydantic-settings`, env vars without prefix (`HA_BASE_URL`, `HA_TOKEN`, `GRID_ENTITY_ID`).
 - `frontend/` — React 18 + Vite + TypeScript + Recharts. No router, no state library.
   - `App.tsx` — fetches all three endpoints every 30 s; owns the selected history range.
   - `HistoryChart.tsx` — builds the timeline, gradient, and stats (all logic lives here).
   - `i18n.tsx` — `en` / `uk` strings in one object; every new key must be added to both.
-  - `utils.ts` — `formatDuration`, `normalizeState`.
+  - `utils.ts` — `formatDuration`, `normalizeState`, `HistoryRange` / `getRangeBounds`.
 - `docker-compose.yml` — backend on :8033, frontend (nginx, proxies `/api/` to backend) on :3033.
 
 ## Commands
@@ -38,7 +38,7 @@ docker compose up --build
 
 ## Conventions
 
-- Allowed history ranges are whitelisted in `main.py` (`6, 12, 24, 48, 72, 168`) and must match the `<select>` in `App.tsx` and `MAX_HISTORY_HOURS` in `ha_client.py`.
-- Chart gradients use `objectBoundingBox` (x 0→1 across the line's own bounds), so the plotted line must always span the full time range; hide segments via stop opacity rather than `null` gaps.
+- History ranges (`HistoryRange` in `utils.ts`): rolling `hours` windows whitelisted in `main.py` (`ALLOWED_HOURS`; must match the `<select>` in `App.tsx` and `MAX_HISTORY_HOURS` in `ha_client.py`), or `'today'`/`'yesterday'` — calendar days in the browser's timezone, sent as `start`/`end` ISO params. `getRangeBounds` is the single source for a range's start/end; `live: false` (yesterday) means the current state must not be applied at the range end.
+- Chart colours are horizontal gradients defined in plot-area pixels (`gradientUnits="userSpaceOnUse"`, rendered via `<Customized>` to get Recharts' `offset`). Don't switch back to the default `objectBoundingBox`: a flat line has a zero-height box and SVG won't paint it. Segments are hidden via stop opacity.
 - Colours come from CSS variables in `index.css` (`--on`, `--off`, `--text-muted`, …) with light/dark variants; don't hardcode colours in components.
 - Frontend build-time config is via `VITE_*` env vars (see README); they're baked in at build, passed as Docker build args.

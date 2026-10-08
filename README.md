@@ -69,7 +69,7 @@ npm run dev
 
 - `GET /health` – health check
 - `GET /api/state` – current state of the grid entity
-- `GET /api/history?hours=24` – state change history (one of: 6, 12, 24, 48, 72, 168); `start` is the exact window start sent to HA
+- `GET /api/history?hours=24` – state change history for a rolling window (one of: 6, 12, 24, 48, 72, 168), or `?start=<ISO>[&end=<ISO>]` for a fixed window with timezone offset (max 168 h; `end` defaults to now). The response's `start` is the exact window start sent to HA
 - `GET /api/last-change` – last on/off change time and state
 
 ## Page example

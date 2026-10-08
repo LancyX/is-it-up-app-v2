@@ -8,12 +8,13 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   ReferenceArea,
+  Customized,
 } from 'recharts'
 import type { History } from './api'
 import { useTranslations } from './i18n'
 import type { Locale } from './i18n'
-import { formatDuration, normalizeState } from './utils'
-import type { GridState } from './utils'
+import { formatDuration, getRangeBounds, normalizeState } from './utils'
+import type { GridState, HistoryRange } from './utils'
 
 const stateColor = (state: GridState) =>
   state === 'on' ? 'var(--on)' : state === 'off' ? 'var(--off)' : 'var(--text-muted)'
@@ -30,12 +31,12 @@ export function HistoryChart({
   history,
   currentState,
   lastChanged,
-  historyHours,
-}: HistoryChartProps & { historyHours: number }) {
+  historyRange,
+}: HistoryChartProps & { historyRange: HistoryRange }) {
   const { t, locale } = useTranslations()
 
-  const now = Date.now()
-  const minTime = now - historyHours * 60 * 60 * 1000
+  // `now` is the end of the visible range: the real current time, or midnight for 'yesterday'
+  const { start: minTime, end: now, live } = getRangeBounds(historyRange, Date.now())
 
   // 1. Generate boundary-aligned timeline: each point starts a segment lasting until the next point
   const timeline = useMemo(() => {
@@ -76,15 +77,16 @@ export function HistoryChart({
     points.push(...pointsAfter)
 
     // Insert current state change if missing
-    if (currentState != null && lastChanged) {
+    if (live && currentState != null && lastChanged) {
       const lastPoint = points[points.length - 1]
       if (lastChangedTime > minTime && lastChangedTime < now && lastPoint.time < lastChangedTime) {
         points.push({ time: lastChangedTime, state: normalizeState(currentState) })
       }
     }
 
-    // Append point at now
-    const lastState = currentState != null ? normalizeState(currentState) : points[points.length - 1].state
+    // Append point at now (the current state applies only if the range ends now)
+    const lastState =
+      live && currentState != null ? normalizeState(currentState) : points[points.length - 1].state
     points.push({ time: now, state: lastState })
 
     // 'unavailable'/'unknown' carries the last known state forward, so off -> unavailable -> off
@@ -94,10 +96,9 @@ export function HistoryChart({
       if (p.state !== 'unknown') lastKnown = p.state
       return { ...p, state: lastKnown }
     })
-  }, [history, currentState, lastChanged, minTime, now])
+  }, [history, currentState, lastChanged, minTime, now, live])
 
-  // 'unknown' is plotted at 0 but made invisible via the gradient. Don't use null gaps: the
-  // gradients are sized to the line's bounding box, so the line must span the full range.
+  // 'unknown' is plotted at 0 but made invisible via the gradient (zero stop opacity)
   const data = useMemo(
     () => timeline.map((p) => ({ ...p, value: p.state === 'on' ? 1 : 0 })),
     [timeline],
@@ -197,7 +198,8 @@ export function HistoryChart({
     )
   }
 
-  const differentDays = new Date(minTime).toDateString() !== new Date(now).toDateString()
+  // `now - 1`: 'yesterday' ends exactly at midnight, which is still the same day
+  const differentDays = new Date(minTime).toDateString() !== new Date(now - 1).toDateString()
 
   const formatTime = (time: number) => {
     const date = new Date(time)
@@ -232,7 +234,7 @@ export function HistoryChart({
     return t('stats.count_plural').replace('{count}', count.toString())
   }
 
-  const uniqueId = `grad-${historyHours}`
+  const uniqueId = `grad-${historyRange}`
 
   return (
     <div className="chart-wrap">
@@ -268,26 +270,49 @@ export function HistoryChart({
 
       <ResponsiveContainer width="100%" height={220}>
         <AreaChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 8 }}>
-          <defs>
-            <linearGradient id={`line-${uniqueId}`} x1="0" y1="0" x2="1" y2="0">
-              {gradientStops.map((s, idx) => (
-                <stop
-                  key={idx}
-                  offset={s.offset}
-                  stopColor={s.color}
-                  stopOpacity={s.state === 'unknown' ? 0 : 1}
-                />
-              ))}
-            </linearGradient>
-            <linearGradient id={`fill-${uniqueId}`} x1="0" y1="0" x2="1" y2="0">
-              {gradientStops.map((s, idx) => {
-                const opacity = s.state === 'on' ? 0.15 : s.state === 'off' ? 0.02 : 0
-                return (
-                  <stop key={idx} offset={s.offset} stopColor={s.color} stopOpacity={opacity} />
-                )
-              })}
-            </linearGradient>
-          </defs>
+          {/* Gradients span the plot area in pixels (userSpaceOnUse). The default objectBoundingBox
+              would follow the line's own bounds, and a flat line (no change in range) has zero
+              height, so SVG wouldn't paint it at all. `offset` is the plot area from Recharts. */}
+          <Customized
+            component={({ offset }: { offset?: { left: number; width: number } }) =>
+              offset ? (
+                <defs>
+                  <linearGradient
+                    id={`line-${uniqueId}`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={offset.left}
+                    y1="0"
+                    x2={offset.left + offset.width}
+                    y2="0"
+                  >
+                    {gradientStops.map((s, idx) => (
+                      <stop
+                        key={idx}
+                        offset={s.offset}
+                        stopColor={s.color}
+                        stopOpacity={s.state === 'unknown' ? 0 : 1}
+                      />
+                    ))}
+                  </linearGradient>
+                  <linearGradient
+                    id={`fill-${uniqueId}`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={offset.left}
+                    y1="0"
+                    x2={offset.left + offset.width}
+                    y2="0"
+                  >
+                    {gradientStops.map((s, idx) => {
+                      const opacity = s.state === 'on' ? 0.15 : s.state === 'off' ? 0.02 : 0
+                      return (
+                        <stop key={idx} offset={s.offset} stopColor={s.color} stopOpacity={opacity} />
+                      )
+                    })}
+                  </linearGradient>
+                </defs>
+              ) : null
+            }
+          />
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           {unknownRanges.map((r) => (
             <ReferenceArea

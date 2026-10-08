@@ -4,6 +4,7 @@ import { useTranslations } from './i18n'
 import './App.css'
 import { fetchState, fetchHistory, fetchLastChange } from './api'
 import type { State, History, LastChange } from './api'
+import type { HistoryRange } from './utils'
 import { StateCard } from './StateCard'
 import { HistoryChart } from './HistoryChart'
 import { LastChangeCard } from './LastChangeCard'
@@ -20,7 +21,7 @@ function App() {
   const [lastChange, setLastChange] = useState<LastChange | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [historyHours, setHistoryHours] = useState(24)
+  const [historyRange, setHistoryRange] = useState<HistoryRange>('today')
   const [contactsOpen, setContactsOpen] = useState(false)
 
   const load = async () => {
@@ -28,7 +29,7 @@ function App() {
     try {
       const [stateRes, historyRes, lastRes] = await Promise.all([
         fetchState(),
-        fetchHistory(historyHours),
+        fetchHistory(historyRange),
         fetchLastChange(),
       ])
       setState(stateRes)
@@ -43,12 +44,12 @@ function App() {
 
   useEffect(() => {
     load()
-  }, [historyHours])
+  }, [historyRange])
 
   useEffect(() => {
     const id = setInterval(load, REFRESH_MS)
     return () => clearInterval(id)
-  }, [historyHours])
+  }, [historyRange])
 
   return (
     <div className="app">
@@ -106,10 +107,15 @@ function App() {
             <div className="chart-header">
               <h2>{t('history.title')}</h2>
               <select
-                value={historyHours}
-                onChange={(e) => setHistoryHours(Number(e.target.value))}
+                value={historyRange}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setHistoryRange(v === 'today' || v === 'yesterday' ? v : Number(v))
+                }}
                 className="hours-select"
               >
+                <option value="today">{t('history.today')}</option>
+                <option value="yesterday">{t('history.yesterday')}</option>
                 <option value={6}>{t('history.hours6')}</option>
                 <option value={12}>{t('history.hours12')}</option>
                 <option value={24}>{t('history.hours24')}</option>
@@ -122,7 +128,7 @@ function App() {
               history={history}
               currentState={state?.state}
               lastChanged={state?.last_changed}
-              historyHours={historyHours}
+              historyRange={historyRange}
             />
           </section>
         </>

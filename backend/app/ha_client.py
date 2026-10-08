@@ -46,13 +46,11 @@ def _fetch_history_period(start: datetime, end: datetime) -> list[dict[str, Any]
     return data[0]
 
 
-def get_history(hours: int = 24) -> tuple[datetime, list[dict[str, Any]]]:
-    """Fetch state history for the grid entity. Returns (requested start, list of state changes)."""
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(hours=hours)
+def get_history(start: datetime, end: datetime) -> list[dict[str, Any]]:
+    """Fetch state history for the grid entity between start and end (both tz-aware)."""
     # We do NOT filter the result by start_ts because HA returns the "initial state"
     # as the first element, with its timestamp clamped to start_ts. We need this!
-    return start, _fetch_history_period(start, end)
+    return _fetch_history_period(start, end)
 
 
 def _parse_ts(iso_str: str) -> float:

@@ -1,3 +1,6 @@
+import { getRangeBounds } from './utils'
+import type { HistoryRange } from './utils'
+
 // Same host: use path only; Nginx Proxy Manager routes /api to backend
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
 
@@ -36,8 +39,12 @@ export async function fetchState(): Promise<State> {
   return request<State>('/state')
 }
 
-export async function fetchHistory(hours: number): Promise<History> {
-  return request<History>(`/history?hours=${hours}`)
+export async function fetchHistory(range: HistoryRange): Promise<History> {
+  if (typeof range === 'number') return request<History>(`/history?hours=${range}`)
+  const { start, end, live } = getRangeBounds(range, Date.now())
+  const params = new URLSearchParams({ start: new Date(start).toISOString() })
+  if (!live) params.set('end', new Date(end).toISOString())
+  return request<History>(`/history?${params}`)
 }
 
 export async function fetchLastChange(): Promise<LastChange | null> {

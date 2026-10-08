@@ -87,7 +87,13 @@ export function HistoryChart({
     const lastState = currentState != null ? normalizeState(currentState) : points[points.length - 1].state
     points.push({ time: now, state: lastState })
 
-    return points
+    // 'unavailable'/'unknown' carries the last known state forward, so off -> unavailable -> off
+    // is one continuous outage. Only a stretch with no known state before it stays 'unknown'.
+    let lastKnown: GridState = 'unknown'
+    return points.map((p) => {
+      if (p.state !== 'unknown') lastKnown = p.state
+      return { ...p, state: lastKnown }
+    })
   }, [history, currentState, lastChanged, minTime, now])
 
   // 'unknown' is plotted at 0 but made invisible via the gradient. Don't use null gaps: the

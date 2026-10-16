@@ -466,6 +466,7 @@ export function HistoryChart({
             width={52}
           />
           <Tooltip
+            cursor={false}
             content={({ active, payload }) => {
               if (active && payload && payload.length) {
                 const dataPoint = payload[0].payload
@@ -492,6 +493,7 @@ export function HistoryChart({
             stroke={`url(#line-${uniqueId})`}
             strokeWidth={2}
             fill={`url(#fill-${uniqueId})`}
+            activeDot={false}
             animationDuration={300}
           />
         </AreaChart>

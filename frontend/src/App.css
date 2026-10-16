@@ -106,13 +106,6 @@
   padding: 1.25rem 1.5rem;
   border: 1px solid var(--border);
   box-shadow: 0 4px 6px -1px var(--shadow), 0 2px 4px -1px var(--shadow);
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s;
-}
-
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px var(--shadow), 0 4px 6px -2px var(--shadow);
-  border-color: var(--accent);
 }
 
 .card-label {
@@ -401,12 +394,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  transition: border-color 0.25s, background-color 0.25s;
-}
-
-.stat-badge:hover {
-  border-color: var(--accent);
-  background-color: var(--accent-dim);
 }
 
 .stat-badge .stat-label {

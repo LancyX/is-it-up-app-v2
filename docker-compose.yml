@@ -3,6 +3,7 @@ services:
     build: ./backend
     ports:
       - "8033:8000"
+    restart: always
     environment:
       - HA_BASE_URL=${HA_BASE_URL:-http://host.docker.internal:8123}
       - HA_TOKEN=${HA_TOKEN}
@@ -22,5 +23,6 @@ services:
         VITE_API_BASE: ${VITE_API_BASE:-/api}
     ports:
       - "3033:80"
+    restart: always
     depends_on:
       - backend

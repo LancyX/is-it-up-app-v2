@@ -33,6 +33,7 @@ Pretty much fully AI genarated app, so can have issues. Made for fun, but can be
 | `HA_TOKEN`       | Long-Lived Access Token from HA       | From Profile → Tokens      |
 | `GRID_ENTITY_ID` | Entity ID for grid power (binary)    | `binary_sensor.grid_power` |
 | `SCHEDULE_ENTITY_ID` | Optional. Status sensor of the [svitlo.live](https://github.com/chaichuk/svitlo_live) integration; enables the outage schedule card and planned outages on the chart | `sensor.svitlo_kiivska_oblast_5_1_electricity` |
+| `SCHEDULE_CALENDAR_ID` | Optional. svitlo.live calendar entity, used to tell which day the schedule is for. Derived from `SCHEDULE_ENTITY_ID` if unset | `calendar.svitlo_kiivska_oblast_5_1_outages_schedule` |
 
 **Frontend** (build time, optional)
 

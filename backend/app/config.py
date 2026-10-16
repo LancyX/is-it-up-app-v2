@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     grid_entity_id: str = "binary_sensor.grid_power"
     # Optional svitlo.live status sensor (sensor.svitlo_<region>_<queue>_electricity); empty = no schedule
     schedule_entity_id: str = ""
+    # Its calendar entity; empty = derived from schedule_entity_id (calendar.svitlo_<region>_<queue>_outages_schedule)
+    schedule_calendar_id: str = ""
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 

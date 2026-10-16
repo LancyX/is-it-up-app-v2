@@ -49,7 +49,8 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
   }, [])
 
   const outages = parseOutages(schedule)
-  const days = schedule.days ?? []
+  // Days that haven't ended; the backend may also send yesterday (for the history chart)
+  const days = (schedule.days ?? []).filter((d) => new Date(d.end).getTime() > now)
   const current = outages.find((o) => o.start <= now && now < o.end)
   const next = outages.find((o) => o.start > now)
 
@@ -97,10 +98,11 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
         {summary}
       </p>
 
-      {days.map((day, idx) => {
+      {/* Nothing published at all: the summary already says so */}
+      {days.some((d) => d.published) && days.map((day) => {
         const start = new Date(day.start).getTime()
         const end = new Date(day.end).getTime()
-        if (end <= now) return null // stale schedule from before midnight
+        const dayName = start <= now ? t('history.today') : t('schedule.tomorrow')
         const dateLabel = new Date(start).toLocaleDateString(localeTag(locale), {
           weekday: 'short',
           day: 'numeric',
@@ -112,7 +114,7 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
             <div className="schedule-day" key={day.date}>
               <div className="schedule-day-header">
                 <span className="schedule-day-label">
-                  {idx === 0 ? t('history.today') : t('schedule.tomorrow')}
+                  {dayName}
                   <span className="schedule-day-date">{dateLabel}</span>
                 </span>
               </div>
@@ -133,7 +135,7 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
           <div className="schedule-day" key={day.date}>
             <div className="schedule-day-header">
               <span className="schedule-day-label">
-                {idx === 0 ? t('history.today') : t('schedule.tomorrow')}
+                {dayName}
                 <span className="schedule-day-date">{dateLabel}</span>
               </span>
               <span className="schedule-day-total">

@@ -143,40 +143,91 @@ def _slots_to_outages(slots: list[str], day: date) -> list[tuple[datetime, datet
     return outages
 
 
+def _schedule_calendar_id() -> str:
+    """svitlo.live calendar entity: explicit setting, or derived from the status sensor's id."""
+    if settings.schedule_calendar_id:
+        return settings.schedule_calendar_id
+    sensor = settings.schedule_entity_id
+    if sensor.startswith("sensor.") and sensor.endswith("_electricity"):
+        return "calendar." + sensor[len("sensor."):-len("_electricity")] + "_outages_schedule"
+    return ""
+
+
+def _get_calendar_outages(calendar_id: str, start: datetime, end: datetime) -> set[tuple[datetime, datetime]]:
+    url = f"{settings.ha_base_url.rstrip('/')}/api/calendars/{calendar_id}"
+    params = {"start": start.isoformat(), "end": end.isoformat()}
+    with httpx.Client(timeout=10.0) as client:
+        resp = client.get(url, headers=_headers(), params=params)
+        resp.raise_for_status()
+        events = resp.json()
+    return {
+        (
+            datetime.fromisoformat(e["start"]["dateTime"]).astimezone(timezone.utc),
+            datetime.fromisoformat(e["end"]["dateTime"]).astimezone(timezone.utc),
+        )
+        for e in events
+        if "dateTime" in e.get("start", {}) and "dateTime" in e.get("end", {})
+    }
+
+
+def _schedule_days(attrs: dict[str, Any], base: date) -> tuple[dict[date, bool], list[tuple[datetime, datetime]]]:
+    """Published flag per day and merged outages, assuming `today_48half` belongs to `base`."""
+    published_days: dict[date, bool] = {}
+    outages: list[tuple[datetime, datetime]] = []
+    for offset, key in ((0, "today_48half"), (1, "tomorrow_48half")):
+        day = base + timedelta(days=offset)
+        slots = attrs.get(key) or []
+        # An all-'unknown' list means no schedule was published for that day
+        published_days[day] = any(s in ("on", "off") for s in slots)
+        if published_days[day]:
+            day_outages = _slots_to_outages(slots, day)
+            # An outage over midnight continues into the next day's first slot
+            if outages and day_outages and outages[-1][1] == day_outages[0][0]:
+                outages[-1] = (outages[-1][0], day_outages.pop(0)[1])
+            outages.extend(day_outages)
+    return published_days, outages
+
+
 def get_schedule() -> dict[str, Any] | None:
     """Planned outage schedule from the svitlo.live sensor, or None if not configured."""
     if not settings.schedule_entity_id:
         return None
     entity = _get_entity_state(settings.schedule_entity_id)
     attrs = entity.get("attributes", {})
+    today = datetime.now(SCHEDULE_TZ).date()
 
-    # The sensor doesn't expose the schedule's date; `updated` is set on every refresh,
-    # so its Kyiv date is the day `today_48half` belongs to.
-    updated = attrs.get("updated")
-    try:
-        today = datetime.fromisoformat(updated).astimezone(SCHEDULE_TZ).date()
-    except (TypeError, ValueError):
-        today = datetime.now(SCHEDULE_TZ).date()
+    # The sensor doesn't expose which date `today_48half` is for, and after midnight it keeps
+    # yesterday's schedule until svitlo.live publishes the new day. The integration's calendar
+    # has the real dates, so pick the date whose outages match the calendar's events.
+    candidates = (today, today - timedelta(days=1))
+    base = today
+    calendar_id = _schedule_calendar_id()
+    if calendar_id:
+        try:
+            calendar = _get_calendar_outages(
+                calendar_id,
+                datetime.combine(today - timedelta(days=1), time(0), SCHEDULE_TZ),
+                datetime.combine(today + timedelta(days=2), time(0), SCHEDULE_TZ),
+            )
+            base = next((c for c in candidates if set(_schedule_days(attrs, c)[1]) == calendar), today)
+        except Exception:
+            pass  # calendar unavailable: assume the schedule is today's
+    published_days, outages = _schedule_days(attrs, base)
 
-    days = []
-    outages: list[tuple[datetime, datetime]] = []
-    for offset, key in ((0, "today_48half"), (1, "tomorrow_48half")):
-        day = today + timedelta(days=offset)
-        slots = attrs.get(key) or []
-        # An all-'unknown' list means no schedule was published for that day
-        published = any(s in ("on", "off") for s in slots)
-        days.append({
+    # Always report today and tomorrow (unpublished if svitlo.live has nothing for them yet),
+    # plus a stale yesterday so the history chart can still show it.
+    for day in (today, today + timedelta(days=1)):
+        published_days.setdefault(day, False)
+    days = [
+        {
             "date": day.isoformat(),
             "start": datetime.combine(day, time(0), SCHEDULE_TZ).isoformat(),
             "end": datetime.combine(day + timedelta(days=1), time(0), SCHEDULE_TZ).isoformat(),
             "published": published,
-        })
-        if published:
-            day_outages = _slots_to_outages(slots, day)
-            # An outage over midnight continues into the next day's first slot
-            if outages and day_outages and outages[-1][1] == day_outages[0][0]:
-                outages[-1] = (outages[-1][0], day_outages.pop(0)[1])
-            outages.extend(day_outages)
+        }
+        for day, published in sorted(published_days.items())
+        if day >= today or published
+    ]
 
     return {
         "entity_id": settings.schedule_entity_id,
@@ -185,7 +236,7 @@ def get_schedule() -> dict[str, Any] | None:
         # State 'Emergency' = emergency outages are in effect and the schedule may not be followed
         "emergency": entity.get("state") == "Emergency",
         "available": entity.get("state") not in ("No data", "unavailable", "unknown"),
-        "updated": updated,
+        "updated": attrs.get("updated"),
         "days": days,
         "outages": [{"start": s.isoformat(), "end": e.isoformat()} for s, e in outages],
     }

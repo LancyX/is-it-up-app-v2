@@ -7,7 +7,7 @@ Single-page status app showing a Home Assistant binary sensor (grid power: on/of
 - `backend/` — FastAPI (Poetry, Python 3.11+). Thin proxy over the HA REST API; HA token never reaches the browser.
   - `app/ha_client.py` — sync `httpx` calls to HA (`/api/states/<id>`, `/api/history/period/<start>`). Run from async routes via a thread pool (`run_sync` in `main.py`).
   - `app/main.py` — routes: `/health`, `/api/state`, `/api/history?hours=N` or `?start=…[&end=…]`, `/api/last-change`, `/api/schedule`.
-  - `app/config.py` — `pydantic-settings`, env vars without prefix (`HA_BASE_URL`, `HA_TOKEN`, `GRID_ENTITY_ID`, optional `SCHEDULE_ENTITY_ID`).
+  - `app/config.py` — `pydantic-settings`, env vars without prefix (`HA_BASE_URL`, `HA_TOKEN`, `GRID_ENTITY_ID`, optional `SCHEDULE_ENTITY_ID` / `SCHEDULE_CALENDAR_ID`).
 - `frontend/` — React 18 + Vite + TypeScript + Recharts. No router, no state library.
   - `App.tsx` — fetches all endpoints every 30 s; owns the selected history range. `/api/schedule` is fetched separately so its failure doesn't hide the page.
   - `ScheduleCard.tsx` — planned outage schedule: DTEK-style hour grid with half-hour halves (hover shows exact times), next outage, emergency banner.
@@ -40,7 +40,8 @@ docker compose up --build
 ## Outage schedule (svitlo.live)
 
 - Optional: `SCHEDULE_ENTITY_ID` = the svitlo.live HACS integration's status sensor (`sensor.svitlo_<region>_<queue>_electricity`). Empty → `/api/schedule` returns `{"enabled": false}` and the UI hides the card/overlay.
-- Its attributes `today_48half` / `tomorrow_48half` are 48 half-hour slots (`on`/`off`/`unknown`) from Kyiv midnight. The date isn't exposed, so `get_schedule` takes the Kyiv date of the `updated` attribute; slots are converted to UTC intervals in the backend (DST-safe) and merged across midnight.
+- Its attributes `today_48half` / `tomorrow_48half` are 48 half-hour slots (`on`/`off`/`unknown`) from Kyiv midnight; slots are converted to UTC intervals in the backend (DST-safe) and merged across midnight.
+- The sensor doesn't expose which date `today_48half` is for, and after midnight it keeps yesterday's schedule until svitlo.live publishes the new day (`updated` keeps changing, so it can't be used as the date). `get_schedule` tries today and yesterday as the base date and picks the one whose outages match the integration's calendar events (`/api/calendars/<id>`, real dates; id derived as `calendar.svitlo_<region>_<queue>_outages_schedule` unless `SCHEDULE_CALENDAR_ID` is set). It always returns today/tomorrow (Kyiv) in `days`, plus a stale published yesterday for the history chart; `ScheduleCard` ignores ended days and names days by date, not position.
 - State `Emergency` = emergency outages (ГАВ) are in effect and the schedule may not be followed — shown as a banner.
 - Only today/tomorrow are available, so the history chart's "Plan" lane (drawn under the X axis via `<Customized>`, same time scale as the plot; planned outage start/end times are labelled under it, skipping ones closer than `LANE_LABEL_MIN_GAP` px) covers just those days and is hidden when the range has no published day (shows the current schedule, not earlier versions).
 

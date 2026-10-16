@@ -1,3 +1,6 @@
+import type { Schedule } from './api'
+
+
 
 export function formatDuration(seconds: number, t: (key: string) => string): string {
   const h = Math.floor(seconds / 3600)
@@ -28,4 +31,14 @@ export function getRangeBounds(range: HistoryRange, now: number): { start: numbe
   const yesterday = new Date(midnight)
   yesterday.setDate(yesterday.getDate() - 1) // not -24h: a DST-change day is 23 or 25 hours
   return { start: yesterday.getTime(), end: midnight.getTime(), live: false }
+}
+
+export interface Interval {
+  start: number
+  end: number
+}
+
+// Planned outages from /api/schedule as epoch-ms intervals
+export function parseOutages(schedule: Schedule | null | undefined): Interval[] {
+  return (schedule?.outages ?? []).map((o) => ({ start: new Date(o.start).getTime(), end: new Date(o.end).getTime() }))
 }

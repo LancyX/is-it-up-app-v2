@@ -7,6 +7,7 @@ services:
       - HA_BASE_URL=${HA_BASE_URL:-http://host.docker.internal:8123}
       - HA_TOKEN=${HA_TOKEN}
       - GRID_ENTITY_ID=${GRID_ENTITY_ID:-binary_sensor.grid_power}
+      - SCHEDULE_ENTITY_ID=${SCHEDULE_ENTITY_ID:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

@@ -43,7 +43,7 @@ export function StateCard({ state }: StateCardProps) {
       </div>
       {duration && (
         <p className="state-duration text-muted" style={{ fontSize: '0.9em', marginTop: 4 }}>
-          {t('lastChange.for')} {duration}
+          {t('state.for')} {duration}
         </p>
       )}
       {/* <p className="state-entity">{label}</p> */}

@@ -32,6 +32,7 @@ Pretty much fully AI genarated app, so can have issues. Made for fun, but can be
 | `HA_BASE_URL`    | Home Assistant URL                   | `http://192.168.1.10:8123` |
 | `HA_TOKEN`       | Long-Lived Access Token from HA       | From Profile → Tokens      |
 | `GRID_ENTITY_ID` | Entity ID for grid power (binary)    | `binary_sensor.grid_power` |
+| `SCHEDULE_ENTITY_ID` | Optional. Status sensor of the [svitlo.live](https://github.com/chaichuk/svitlo_live) integration; enables the outage schedule card and planned outages on the chart | `sensor.svitlo_kiivska_oblast_5_1_electricity` |
 
 **Frontend** (build time, optional)
 

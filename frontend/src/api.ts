@@ -26,6 +26,19 @@ export interface LastChange {
   previous_duration_sec?: number
 }
 
+export interface Schedule {
+  enabled: boolean
+  queue?: string
+  region?: string
+  emergency?: boolean
+  available?: boolean
+  updated?: string
+  // Days of the schedule (Kyiv calendar days); `published: false` = no schedule for that day yet
+  days?: Array<{ date: string; start: string; end: string; published: boolean }>
+  // Planned outages, merged across days
+  outages?: Array<{ start: string; end: string }>
+}
+
 async function request<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`)
   if (!res.ok) {
@@ -49,4 +62,8 @@ export async function fetchHistory(range: HistoryRange): Promise<History> {
 
 export async function fetchLastChange(): Promise<LastChange | null> {
   return request<LastChange | null>('/last-change')
+}
+
+export async function fetchSchedule(): Promise<Schedule> {
+  return request<Schedule>('/schedule')
 }

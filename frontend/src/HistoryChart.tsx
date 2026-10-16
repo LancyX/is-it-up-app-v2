@@ -10,11 +10,11 @@ import {
   ReferenceArea,
   Customized,
 } from 'recharts'
-import type { History } from './api'
+import type { History, Schedule } from './api'
 import { useTranslations } from './i18n'
 import type { Locale } from './i18n'
-import { formatDuration, getRangeBounds, normalizeState } from './utils'
-import type { GridState, HistoryRange } from './utils'
+import { formatDuration, getRangeBounds, normalizeState, parseOutages } from './utils'
+import type { GridState, HistoryRange, Interval } from './utils'
 
 const stateColor = (state: GridState) =>
   state === 'on' ? 'var(--on)' : state === 'off' ? 'var(--off)' : 'var(--text-muted)'
@@ -23,7 +23,13 @@ interface HistoryChartProps {
   history: History | null
   currentState?: string | null
   lastChanged?: string
+  schedule?: Schedule | null
 }
+
+// Schedule lane under the X axis (Recharts' default axis height is 30)
+const X_AXIS_HEIGHT = 30
+const LANE_GAP = 6
+const LANE_HEIGHT = 10
 
 const localeTag = (locale: Locale) => (locale === 'uk' ? 'uk-UA' : 'en')
 
@@ -32,6 +38,7 @@ export function HistoryChart({
   currentState,
   lastChanged,
   historyRange,
+  schedule,
 }: HistoryChartProps & { historyRange: HistoryRange }) {
   const { t, locale } = useTranslations()
 
@@ -114,6 +121,22 @@ export function HistoryChart({
     }
     return ranges
   }, [timeline])
+
+  // Planned schedule (svitlo.live) for a separate lane under the time axis, clipped to the
+  // visible range. `covered` = days with a published schedule; elsewhere the plan is unknown.
+  const scheduleLane = useMemo(() => {
+    const clip = (list: Interval[]) =>
+      list
+        .filter((o) => o.end > minTime && o.start < now)
+        .map((o) => ({ start: Math.max(o.start, minTime), end: Math.min(o.end, now) }))
+    const covered = clip(
+      (schedule?.days ?? [])
+        .filter((d) => d.published)
+        .map((d) => ({ start: new Date(d.start).getTime(), end: new Date(d.end).getTime() })),
+    )
+    if (covered.length === 0) return null
+    return { covered, outages: clip(parseOutages(schedule)) }
+  }, [schedule, minTime, now])
 
   // 2. Compute dynamic SVG horizontal gradient stops based on timeline
   const gradientStops = useMemo(() => {
@@ -235,6 +258,7 @@ export function HistoryChart({
   }
 
   const uniqueId = `grad-${historyRange}`
+  const laneSpace = scheduleLane ? LANE_GAP + LANE_HEIGHT : 0
 
   return (
     <div className="chart-wrap">
@@ -268,8 +292,8 @@ export function HistoryChart({
         </div>
       )}
 
-      <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 8 }}>
+      <ResponsiveContainer width="100%" height={220 + laneSpace}>
+        <AreaChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 8 + laneSpace }}>
           {/* Gradients span the plot area in pixels (userSpaceOnUse). The default objectBoundingBox
               would follow the line's own bounds, and a flat line (no change in range) has zero
               height, so SVG wouldn't paint it at all. `offset` is the plot area from Recharts. */}
@@ -330,6 +354,35 @@ export function HistoryChart({
               }
             />
           ))}
+          {scheduleLane && (
+            <Customized
+              component={({ offset }: { offset?: { left: number; top: number; width: number; height: number } }) => {
+                if (!offset) return null
+                const x = (time: number) => offset.left + ((time - minTime) / (now - minTime)) * offset.width
+                const y = offset.top + offset.height + X_AXIS_HEIGHT + LANE_GAP
+                return (
+                  <g className="schedule-lane">
+                    <text
+                      x={offset.left - 6}
+                      y={y + LANE_HEIGHT / 2}
+                      textAnchor="end"
+                      dominantBaseline="central"
+                      fill="var(--text-muted)"
+                      fontSize={11}
+                    >
+                      {t('schedule.lane')}
+                    </text>
+                    {scheduleLane.covered.map((c) => (
+                      <rect key={`c-${c.start}`} x={x(c.start)} y={y} width={x(c.end) - x(c.start)} height={LANE_HEIGHT} fill="var(--glow-on)" />
+                    ))}
+                    {scheduleLane.outages.map((o) => (
+                      <rect key={`o-${o.start}`} x={x(o.start)} y={y} width={x(o.end) - x(o.start)} height={LANE_HEIGHT} fill="var(--off)" />
+                    ))}
+                  </g>
+                )
+              }}
+            />
+          )}
           <XAxis
             dataKey="time"
             type="number"
@@ -345,7 +398,7 @@ export function HistoryChart({
             tickFormatter={(v) => (v === 1 ? t('state.on_history') : t('state.off_history'))}
             tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
             stroke="var(--border)"
-            width={40}
+            width={52}
           />
           <Tooltip
             content={({ active, payload }) => {
@@ -378,6 +431,19 @@ export function HistoryChart({
           />
         </AreaChart>
       </ResponsiveContainer>
+      {scheduleLane && (
+        <p className="chart-legend">
+          <span className="chart-legend-title">{t('schedule.legend')}</span>
+          <span className="chart-legend-item">
+            <span className="chart-legend-swatch" data-state="on" aria-hidden />
+            {t('schedule.on')}
+          </span>
+          <span className="chart-legend-item">
+            <span className="chart-legend-swatch" data-state="off" aria-hidden />
+            {t('schedule.off')}
+          </span>
+        </p>
+      )}
     </div>
   )
 }

@@ -6,10 +6,11 @@ Single-page status app showing a Home Assistant binary sensor (grid power: on/of
 
 - `backend/` — FastAPI (Poetry, Python 3.11+). Thin proxy over the HA REST API; HA token never reaches the browser.
   - `app/ha_client.py` — sync `httpx` calls to HA (`/api/states/<id>`, `/api/history/period/<start>`). Run from async routes via a thread pool (`run_sync` in `main.py`).
-  - `app/main.py` — routes: `/health`, `/api/state`, `/api/history?hours=N` or `?start=…[&end=…]`, `/api/last-change`.
-  - `app/config.py` — `pydantic-settings`, env vars without prefix (`HA_BASE_URL`, `HA_TOKEN`, `GRID_ENTITY_ID`).
+  - `app/main.py` — routes: `/health`, `/api/state`, `/api/history?hours=N` or `?start=…[&end=…]`, `/api/last-change`, `/api/schedule`.
+  - `app/config.py` — `pydantic-settings`, env vars without prefix (`HA_BASE_URL`, `HA_TOKEN`, `GRID_ENTITY_ID`, optional `SCHEDULE_ENTITY_ID`).
 - `frontend/` — React 18 + Vite + TypeScript + Recharts. No router, no state library.
-  - `App.tsx` — fetches all three endpoints every 30 s; owns the selected history range.
+  - `App.tsx` — fetches all endpoints every 30 s; owns the selected history range. `/api/schedule` is fetched separately so its failure doesn't hide the page.
+  - `ScheduleCard.tsx` — planned outage schedule: DTEK-style hour grid with half-hour halves (hover shows exact times), next outage, emergency banner.
   - `HistoryChart.tsx` — builds the timeline, gradient, and stats (all logic lives here).
   - `i18n.tsx` — `en` / `uk` strings in one object; every new key must be added to both.
   - `utils.ts` — `formatDuration`, `normalizeState`, `HistoryRange` / `getRangeBounds`.
@@ -35,6 +36,13 @@ docker compose up --build
 - If the first item is later than `start`, HA has no older record (purged, or the entity was recreated, e.g. after deleting/re-adding a template helper). The chart shows that stretch as "no data" — never guess it from the next state.
 - States other than `on`/`off` (`unavailable`, `unknown`) are normalised to `'unknown'` via `normalizeState`. They carry the previous known state forward (off → unavailable → off is one outage): in the chart/stats (`HistoryChart.tsx`) and in both cards (`get_last_change` in `ha_client.py` collapses history into on/off runs; `App.tsx` feeds its state/time to `StateCard`). HA's raw `last_changed` resets on every such blip, so don't use it for durations. Only a stretch with no earlier known state shows as "no data" / grey "Unavailable".
 - History retention is HA's recorder setting (`purge_keep_days`, default 10), not something this app controls.
+
+## Outage schedule (svitlo.live)
+
+- Optional: `SCHEDULE_ENTITY_ID` = the svitlo.live HACS integration's status sensor (`sensor.svitlo_<region>_<queue>_electricity`). Empty → `/api/schedule` returns `{"enabled": false}` and the UI hides the card/overlay.
+- Its attributes `today_48half` / `tomorrow_48half` are 48 half-hour slots (`on`/`off`/`unknown`) from Kyiv midnight. The date isn't exposed, so `get_schedule` takes the Kyiv date of the `updated` attribute; slots are converted to UTC intervals in the backend (DST-safe) and merged across midnight.
+- State `Emergency` = emergency outages (ГАВ) are in effect and the schedule may not be followed — shown as a banner.
+- Only today/tomorrow are available, so the history chart's "Plan" lane (drawn under the X axis via `<Customized>`, same time scale as the plot) covers just those days and is hidden when the range has no published day (shows the current schedule, not earlier versions).
 
 ## Conventions
 

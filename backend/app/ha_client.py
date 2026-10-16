@@ -1,7 +1,8 @@
 """Home Assistant API client - fetches state and history for Grid Power entity."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -110,3 +111,81 @@ def get_last_change() -> dict[str, Any] | None:
         pass
 
     return result
+
+
+# svitlo.live publishes slots in Kyiv time: today_48half / tomorrow_48half are 48 half-hour
+# slots ('on' / 'off' / 'unknown') starting at local midnight.
+SCHEDULE_TZ = ZoneInfo("Europe/Kyiv")
+
+
+def _get_entity_state(entity_id: str) -> dict[str, Any]:
+    url = f"{settings.ha_base_url.rstrip('/')}/api/states/{entity_id}"
+    with httpx.Client(timeout=10.0) as client:
+        resp = client.get(url, headers=_headers())
+        resp.raise_for_status()
+        return resp.json()
+
+
+def _slots_to_outages(slots: list[str], day: date) -> list[tuple[datetime, datetime]]:
+    """Merge consecutive 'off' half-hour slots of a Kyiv-local day into (start, end) intervals."""
+    outages: list[tuple[datetime, datetime]] = []
+    midnight = datetime.combine(day, time(0), SCHEDULE_TZ)
+    for i, slot in enumerate(slots):
+        if slot != "off":
+            continue
+        # Wall-clock arithmetic, then to UTC: correct on 23/25-hour DST days too
+        start = (midnight + timedelta(minutes=30 * i)).astimezone(timezone.utc)
+        end = (midnight + timedelta(minutes=30 * (i + 1))).astimezone(timezone.utc)
+        if outages and outages[-1][1] == start:
+            outages[-1] = (outages[-1][0], end)
+        else:
+            outages.append((start, end))
+    return outages
+
+
+def get_schedule() -> dict[str, Any] | None:
+    """Planned outage schedule from the svitlo.live sensor, or None if not configured."""
+    if not settings.schedule_entity_id:
+        return None
+    entity = _get_entity_state(settings.schedule_entity_id)
+    attrs = entity.get("attributes", {})
+
+    # The sensor doesn't expose the schedule's date; `updated` is set on every refresh,
+    # so its Kyiv date is the day `today_48half` belongs to.
+    updated = attrs.get("updated")
+    try:
+        today = datetime.fromisoformat(updated).astimezone(SCHEDULE_TZ).date()
+    except (TypeError, ValueError):
+        today = datetime.now(SCHEDULE_TZ).date()
+
+    days = []
+    outages: list[tuple[datetime, datetime]] = []
+    for offset, key in ((0, "today_48half"), (1, "tomorrow_48half")):
+        day = today + timedelta(days=offset)
+        slots = attrs.get(key) or []
+        # An all-'unknown' list means no schedule was published for that day
+        published = any(s in ("on", "off") for s in slots)
+        days.append({
+            "date": day.isoformat(),
+            "start": datetime.combine(day, time(0), SCHEDULE_TZ).isoformat(),
+            "end": datetime.combine(day + timedelta(days=1), time(0), SCHEDULE_TZ).isoformat(),
+            "published": published,
+        })
+        if published:
+            day_outages = _slots_to_outages(slots, day)
+            # An outage over midnight continues into the next day's first slot
+            if outages and day_outages and outages[-1][1] == day_outages[0][0]:
+                outages[-1] = (outages[-1][0], day_outages.pop(0)[1])
+            outages.extend(day_outages)
+
+    return {
+        "entity_id": settings.schedule_entity_id,
+        "queue": attrs.get("queue"),
+        "region": attrs.get("region"),
+        # State 'Emergency' = emergency outages are in effect and the schedule may not be followed
+        "emergency": entity.get("state") == "Emergency",
+        "available": entity.get("state") not in ("No data", "unavailable", "unknown"),
+        "updated": updated,
+        "days": days,
+        "outages": [{"start": s.isoformat(), "end": e.isoformat()} for s, e in outages],
+    }

@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { useTheme } from './theme'
 import { useTranslations } from './i18n'
 import './App.css'
-import { fetchState, fetchHistory, fetchLastChange } from './api'
-import type { State, History, LastChange } from './api'
+import { fetchState, fetchHistory, fetchLastChange, fetchSchedule } from './api'
+import type { State, History, LastChange, Schedule } from './api'
 import type { HistoryRange } from './utils'
 import { StateCard } from './StateCard'
 import { HistoryChart } from './HistoryChart'
 import { LastChangeCard } from './LastChangeCard'
+import { ScheduleCard } from './ScheduleCard'
 
 const REFRESH_MS = 30_000
 const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL ?? ''
@@ -19,6 +20,7 @@ function App() {
   const [state, setState] = useState<State | null>(null)
   const [history, setHistory] = useState<History | null>(null)
   const [lastChange, setLastChange] = useState<LastChange | null>(null)
+  const [schedule, setSchedule] = useState<Schedule | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [historyRange, setHistoryRange] = useState<HistoryRange>('today')
@@ -26,6 +28,10 @@ function App() {
 
   const load = async () => {
     setError(null)
+    // The schedule is optional: its failure must not hide the grid state
+    fetchSchedule()
+      .then(setSchedule)
+      .catch(() => setSchedule(null))
     try {
       const [stateRes, historyRes, lastRes] = await Promise.all([
         fetchState(),
@@ -103,9 +109,13 @@ function App() {
             />
             <LastChangeCard lastChange={lastChange} />
           </div>
+          {schedule?.enabled && <ScheduleCard schedule={schedule} />}
           <section className="chart-section">
             <div className="chart-header">
-              <h2>{t('history.title')}</h2>
+              <div>
+                <h2>{t('history.title')}</h2>
+                <p className="chart-subtitle">{t('history.subtitle')}</p>
+              </div>
               <select
                 value={historyRange}
                 onChange={(e) => {
@@ -129,6 +139,7 @@ function App() {
               currentState={state?.state}
               lastChanged={state?.last_changed}
               historyRange={historyRange}
+              schedule={schedule}
             />
           </section>
         </>

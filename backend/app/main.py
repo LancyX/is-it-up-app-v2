@@ -123,3 +123,13 @@ async def get_last_change():
         return data or {}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Home Assistant error: {str(e)}")
+
+
+@app.get("/api/schedule")
+async def get_schedule():
+    """Planned outage schedule (svitlo.live); `{"enabled": false}` if not configured."""
+    try:
+        data = await run_sync(ha_client.get_schedule)
+        return {"enabled": False} if data is None else {"enabled": True, **data}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Home Assistant error: {str(e)}")

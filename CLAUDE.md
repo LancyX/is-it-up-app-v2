@@ -42,7 +42,7 @@ docker compose up --build
 - Optional: `SCHEDULE_ENTITY_ID` = the svitlo.live HACS integration's status sensor (`sensor.svitlo_<region>_<queue>_electricity`). Empty → `/api/schedule` returns `{"enabled": false}` and the UI hides the card/overlay.
 - Its attributes `today_48half` / `tomorrow_48half` are 48 half-hour slots (`on`/`off`/`unknown`) from Kyiv midnight. The date isn't exposed, so `get_schedule` takes the Kyiv date of the `updated` attribute; slots are converted to UTC intervals in the backend (DST-safe) and merged across midnight.
 - State `Emergency` = emergency outages (ГАВ) are in effect and the schedule may not be followed — shown as a banner.
-- Only today/tomorrow are available, so the history chart's "Plan" lane (drawn under the X axis via `<Customized>`, same time scale as the plot) covers just those days and is hidden when the range has no published day (shows the current schedule, not earlier versions).
+- Only today/tomorrow are available, so the history chart's "Plan" lane (drawn under the X axis via `<Customized>`, same time scale as the plot; planned outage start/end times are labelled under it, skipping ones closer than `LANE_LABEL_MIN_GAP` px) covers just those days and is hidden when the range has no published day (shows the current schedule, not earlier versions).
 
 ## Conventions
 

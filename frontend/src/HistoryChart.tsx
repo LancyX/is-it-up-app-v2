@@ -30,6 +30,9 @@ interface HistoryChartProps {
 const X_AXIS_HEIGHT = 30
 const LANE_GAP = 6
 const LANE_HEIGHT = 10
+// Planned on/off times under the lane, to compare with the actual change times on the X axis
+const LANE_LABEL_HEIGHT = 16
+const LANE_LABEL_MIN_GAP = 36 // px between label centres; closer ones are skipped
 
 const localeTag = (locale: Locale) => (locale === 'uk' ? 'uk-UA' : 'en')
 
@@ -258,7 +261,7 @@ export function HistoryChart({
   }
 
   const uniqueId = `grad-${historyRange}`
-  const laneSpace = scheduleLane ? LANE_GAP + LANE_HEIGHT : 0
+  const laneSpace = scheduleLane ? LANE_GAP + LANE_HEIGHT + LANE_LABEL_HEIGHT : 0
 
   return (
     <div className="chart-wrap">
@@ -378,6 +381,36 @@ export function HistoryChart({
                     {scheduleLane.outages.map((o) => (
                       <rect key={`o-${o.start}`} x={x(o.start)} y={y} width={x(o.end) - x(o.start)} height={LANE_HEIGHT} fill="var(--off)" />
                     ))}
+                    {(() => {
+                      // Outage starts/ends inside the range (not where they're clipped to its edges)
+                      const times = scheduleLane.outages
+                        .flatMap((o) => [o.start, o.end])
+                        .filter((time) => time > minTime && time < now)
+                      const right = offset.left + offset.width
+                      let lastX = -Infinity
+                      return times.map((time) => {
+                        const px = x(time)
+                        if (px - lastX < LANE_LABEL_MIN_GAP) return null
+                        lastX = px
+                        // Keep labels near the plot edges inside it
+                        const anchor = px - offset.left < 16 ? 'start' : right - px < 16 ? 'end' : 'middle'
+                        return (
+                          <g key={`t-${time}`}>
+                            <line x1={px} x2={px} y1={y + LANE_HEIGHT} y2={y + LANE_HEIGHT + 3} stroke="var(--text-muted)" />
+                            <text
+                              x={px}
+                              y={y + LANE_HEIGHT + 4}
+                              textAnchor={anchor}
+                              dominantBaseline="hanging"
+                              fill="var(--text-muted)"
+                              fontSize={11}
+                            >
+                              {new Date(time).toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' })}
+                            </text>
+                          </g>
+                        )
+                      })
+                    })()}
                   </g>
                 )
               }}
@@ -431,19 +464,6 @@ export function HistoryChart({
           />
         </AreaChart>
       </ResponsiveContainer>
-      {scheduleLane && (
-        <p className="chart-legend">
-          <span className="chart-legend-title">{t('schedule.legend')}</span>
-          <span className="chart-legend-item">
-            <span className="chart-legend-swatch" data-state="on" aria-hidden />
-            {t('schedule.on')}
-          </span>
-          <span className="chart-legend-item">
-            <span className="chart-legend-swatch" data-state="off" aria-hidden />
-            {t('schedule.off')}
-          </span>
-        </p>
-      )}
     </div>
   )
 }

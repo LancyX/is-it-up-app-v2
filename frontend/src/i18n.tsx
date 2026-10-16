@@ -72,7 +72,6 @@ const translations: Record<Locale, Record<string, string>> = {
     'schedule.lane': 'Plan',
     'schedule.on': 'power on',
     'schedule.off': 'no power',
-    'schedule.legend': 'By schedule:',
   },
   uk: {
     'app.title': 'Чи є світло',
@@ -142,7 +141,6 @@ const translations: Record<Locale, Record<string, string>> = {
     'schedule.lane': 'Графік',
     'schedule.on': 'світло є',
     'schedule.off': 'немає світла',
-    'schedule.legend': 'За графіком:',
   },
 }
 

@@ -38,7 +38,23 @@ export interface Interval {
   end: number
 }
 
-// Planned outages from /api/schedule as epoch-ms intervals
+// ISO start/end pairs from the API as epoch-ms intervals
+export function parseIntervals(list: Array<{ start: string; end: string }> | null | undefined): Interval[] {
+  return (list ?? []).map((o) => ({ start: new Date(o.start).getTime(), end: new Date(o.end).getTime() }))
+}
+
+// Planned outages from /api/schedule
 export function parseOutages(schedule: Schedule | null | undefined): Interval[] {
-  return (schedule?.outages ?? []).map((o) => ({ start: new Date(o.start).getTime(), end: new Date(o.end).getTime() }))
+  return parseIntervals(schedule?.outages)
+}
+
+// Sort and join overlapping or touching intervals
+export function mergeIntervals(list: Interval[]): Interval[] {
+  const merged: Interval[] = []
+  for (const i of [...list].sort((a, b) => a.start - b.start)) {
+    const last = merged[merged.length - 1]
+    if (last && i.start <= last.end) last.end = Math.max(last.end, i.end)
+    else merged.push({ ...i })
+  }
+  return merged
 }

@@ -13,7 +13,7 @@ import {
 import type { History, Schedule } from './api'
 import { useTranslations } from './i18n'
 import type { Locale } from './i18n'
-import { formatDuration, getRangeBounds, normalizeState, parseOutages } from './utils'
+import { formatDuration, getRangeBounds, mergeIntervals, normalizeState, parseIntervals, parseOutages } from './utils'
 import type { GridState, HistoryRange, Interval } from './utils'
 
 const stateColor = (state: GridState) =>
@@ -29,7 +29,8 @@ interface HistoryChartProps {
 // Schedule lane under the X axis (Recharts' default axis height is 30)
 const X_AXIS_HEIGHT = 30
 const LANE_GAP = 6
-const LANE_HEIGHT = 10
+const LANE_HEIGHT = 14
+const LANE_NO_DATA_MIN_WIDTH = 80 // px; narrower unknown stretches get no "No data" text
 // Planned on/off times under the lane, to compare with the actual change times on the X axis
 const LANE_LABEL_HEIGHT = 16
 const LANE_LABEL_MIN_GAP = 36 // px between label centres; closer ones are skipped
@@ -126,20 +127,31 @@ export function HistoryChart({
   }, [timeline])
 
   // Planned schedule (svitlo.live) for a separate lane under the time axis, clipped to the
-  // visible range. `covered` = days with a published schedule; elsewhere the plan is unknown.
+  // visible range: the current schedule's published days, plus what HA recorded before today.
+  // `covered` = where the plan is known; elsewhere the lane stays empty.
   const scheduleLane = useMemo(() => {
     const clip = (list: Interval[]) =>
-      list
+      mergeIntervals(list)
         .filter((o) => o.end > minTime && o.start < now)
         .map((o) => ({ start: Math.max(o.start, minTime), end: Math.min(o.end, now) }))
-    const covered = clip(
-      (schedule?.days ?? [])
+    const recorded = history?.schedule_history
+    const covered = clip([
+      ...(schedule?.days ?? [])
         .filter((d) => d.published)
         .map((d) => ({ start: new Date(d.start).getTime(), end: new Date(d.end).getTime() })),
-    )
+      ...parseIntervals(recorded?.covered),
+    ])
     if (covered.length === 0) return null
-    return { covered, outages: clip(parseOutages(schedule)) }
-  }, [schedule, minTime, now])
+    // Stretches with no known plan (before the schedule was recorded, HA downtime, unpublished today)
+    const unknown: Interval[] = []
+    let cursor = minTime
+    for (const c of covered) {
+      if (c.start > cursor) unknown.push({ start: cursor, end: c.start })
+      cursor = Math.max(cursor, c.end)
+    }
+    if (cursor < now) unknown.push({ start: cursor, end: now })
+    return { covered, unknown, outages: clip([...parseOutages(schedule), ...parseIntervals(recorded?.outages)]) }
+  }, [schedule, history, minTime, now])
 
   // 2. Compute dynamic SVG horizontal gradient stops based on timeline
   const gradientStops = useMemo(() => {
@@ -375,6 +387,24 @@ export function HistoryChart({
                     >
                       {t('schedule.lane')}
                     </text>
+                    {/* Unknown stretches look like the chart's "No data" areas */}
+                    {scheduleLane.unknown.map((u) => (
+                      <g key={`u-${u.start}`}>
+                        <rect x={x(u.start)} y={y} width={x(u.end) - x(u.start)} height={LANE_HEIGHT} fill="var(--text-muted)" fillOpacity={0.08} />
+                        {x(u.end) - x(u.start) >= LANE_NO_DATA_MIN_WIDTH && (
+                          <text
+                            x={(x(u.start) + x(u.end)) / 2}
+                            y={y + LANE_HEIGHT / 2}
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            fill="var(--text-muted)"
+                            fontSize={10}
+                          >
+                            {t('history.no_data')}
+                          </text>
+                        )}
+                      </g>
+                    ))}
                     {scheduleLane.covered.map((c) => (
                       <rect key={`c-${c.start}`} x={x(c.start)} y={y} width={x(c.end) - x(c.start)} height={LANE_HEIGHT} fill="var(--glow-on)" />
                     ))}
@@ -383,9 +413,11 @@ export function HistoryChart({
                     ))}
                     {(() => {
                       // Outage starts/ends inside the range (not where they're clipped to its edges)
+                      // Only real transitions: the plan must be known on both sides (not where an
+                      // outage is cut by the range edges or the start/end of the known schedule)
                       const times = scheduleLane.outages
                         .flatMap((o) => [o.start, o.end])
-                        .filter((time) => time > minTime && time < now)
+                        .filter((time) => scheduleLane.covered.some((c) => c.start < time && time < c.end))
                       const right = offset.left + offset.width
                       let lastX = -Infinity
                       return times.map((time) => {

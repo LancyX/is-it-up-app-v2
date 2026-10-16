@@ -28,11 +28,11 @@ def get_current_state() -> dict[str, Any]:
         return resp.json()
 
 
-def _fetch_history_period(start: datetime, end: datetime) -> list[dict[str, Any]]:
-    """Fetch raw state-change history for the grid entity between start and end (both tz-aware)."""
+def _fetch_history_period(start: datetime, end: datetime, entity_id: str | None = None) -> list[dict[str, Any]]:
+    """Fetch raw state-change history for an entity (default: the grid one) between start and end (both tz-aware)."""
     url = f"{settings.ha_base_url.rstrip('/')}/api/history/period/{start.isoformat()}"
     params = {
-        "filter_entity_id": settings.grid_entity_id,
+        "filter_entity_id": entity_id or settings.grid_entity_id,
         "minimal_response": "true",
         "end_time": end.isoformat(),
         "no_attributes": "true",
@@ -238,5 +238,39 @@ def get_schedule() -> dict[str, Any] | None:
         "available": entity.get("state") not in ("No data", "unavailable", "unknown"),
         "updated": attrs.get("updated"),
         "days": days,
+        "outages": [{"start": s.isoformat(), "end": e.isoformat()} for s, e in outages],
+    }
+
+
+def get_schedule_history(start: datetime, end: datetime) -> dict[str, Any] | None:
+    """Past schedule from the recorded state of the svitlo.live calendar ('on' during a planned
+    outage), for the part of start..end before today's Kyiv midnight; from today on, the
+    current schedule (get_schedule) is used instead. None if no schedule is configured."""
+    calendar_id = _schedule_calendar_id() if settings.schedule_entity_id else ""
+    if not calendar_id:
+        return None
+    cutoff = min(end, datetime.combine(datetime.now(SCHEDULE_TZ).date(), time(0), SCHEDULE_TZ))
+    covered: list[tuple[datetime, datetime]] = []
+    outages: list[tuple[datetime, datetime]] = []
+    if start < cutoff:
+        items = [
+            (datetime.fromisoformat(h["last_changed"]), h.get("state"))
+            for h in _fetch_history_period(start, cutoff, calendar_id)
+            if h.get("last_changed")
+        ]
+        for i, (ts, state) in enumerate(items):
+            run_end = items[i + 1][0] if i + 1 < len(items) else cutoff
+            # 'unavailable'/'unknown' (e.g. HA restart) = plan unknown for that stretch
+            if state not in ("on", "off") or run_end <= ts:
+                continue
+            for runs, add in ((covered, True), (outages, state == "on")):
+                if not add:
+                    continue
+                if runs and runs[-1][1] == ts:
+                    runs[-1] = (runs[-1][0], run_end)
+                else:
+                    runs.append((ts, run_end))
+    return {
+        "covered": [{"start": s.isoformat(), "end": e.isoformat()} for s, e in covered],
         "outages": [{"start": s.isoformat(), "end": e.isoformat()} for s, e in outages],
     }

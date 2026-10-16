@@ -98,6 +98,10 @@ async def get_history(
             )
     try:
         data = await run_sync(ha_client.get_history, start, end)
+        try:
+            schedule_history = await run_sync(ha_client.get_schedule_history, start, end)
+        except Exception:
+            schedule_history = None  # optional: never fail the grid history because of it
         return {
             "entity_id": settings.grid_entity_id,
             # Lets the client recognise HA's initial-state item (stamped exactly at start)
@@ -110,6 +114,8 @@ async def get_history(
                 }
                 for h in data
             ],
+            # Planned outages recorded before today (see get_schedule_history)
+            "schedule_history": schedule_history,
         }
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Home Assistant error: {str(e)}")

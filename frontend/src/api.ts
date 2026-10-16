@@ -16,6 +16,11 @@ export interface History {
   entity_id?: string
   start?: string
   history: Array<{ state: string; last_changed: string }>
+  // Schedule as recorded in HA before today (null if no schedule is configured)
+  schedule_history?: {
+    covered: Array<{ start: string; end: string }>
+    outages: Array<{ start: string; end: string }>
+  } | null
 }
 
 export interface LastChange {

@@ -14,6 +14,9 @@ const localeTag = (locale: Locale) => (locale === 'uk' ? 'uk-UA' : 'en')
 const formatClock = (time: number, locale: Locale) =>
   new Date(time).toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' })
 
+// Keep "1 год 59 хв" on one line when the summary wraps
+const noWrap = (text: string) => text.replace(/ /g, '\u00a0')
+
 const HALF_HOUR = 30 * 60 * 1000
 
 // Schedule spans are whole half-hours: "4 год", "4 год 30 хв", "30 хв"
@@ -69,11 +72,11 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
   } else if (current) {
     summary = t('schedule.off_until')
       .replace('{time}', formatWhen(current.end))
-      .replace('{left}', formatDuration((current.end - now) / 1000, t))
+      .replace('{left}', noWrap(formatDuration((current.end - now) / 1000, t)))
   } else if (next) {
     summary = t('schedule.next_off')
       .replace('{time}', formatWhen(next.start))
-      .replace('{left}', formatDuration((next.start - now) / 1000, t))
+      .replace('{left}', noWrap(formatDuration((next.start - now) / 1000, t)))
   } else {
     // Without tomorrow's schedule we only know about the rest of today
     summary = days[days.length - 1]?.published ? t('schedule.no_more') : t('schedule.no_more_today')

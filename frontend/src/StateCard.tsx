@@ -42,7 +42,7 @@ export function StateCard({ state }: StateCardProps) {
         </p>
       </div>
       {duration && (
-        <p className="state-duration text-muted" style={{ fontSize: '0.9em', marginTop: 4 }}>
+        <p className="state-duration text-muted">
           {t('state.for')} {duration}
         </p>
       )}

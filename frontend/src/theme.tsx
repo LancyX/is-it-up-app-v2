@@ -22,6 +22,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
+    // Browser bar / status bar colour on phones follows the page background
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+    if (bg) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg)
   }, [theme])
 
   // Keep in sync with system preference (and apply on mount in case it changed)

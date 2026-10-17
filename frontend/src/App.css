@@ -197,6 +197,16 @@
   }
 }
 
+.card .last-change-duration {
+  margin-top: 4px;
+  font-size: 0.9em;
+}
+
+.state-card .state-duration {
+  margin-top: 4px;
+  font-size: 0.9em;
+}
+
 .state-entity {
   margin: 0.25rem 0 0;
   font-size: 0.875rem;
@@ -209,10 +219,9 @@
   font-weight: 500;
 }
 
+/* The previous state's name in the last change card */
 .last-change-state {
-  margin: 0.35rem 0 0;
-  font-size: 0.875rem;
-  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .last-change-state[data-state="on"] {
@@ -239,10 +248,34 @@
   box-shadow: 0 4px 6px -1px var(--shadow), 0 2px 4px -1px var(--shadow);
 }
 
+/* Current state | last change: one card, two columns */
 .cards-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
+  grid-template-columns: 1fr 1fr;
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 6px -1px var(--shadow), 0 2px 4px -1px var(--shadow);
+}
+
+.cards-grid > .card {
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  min-width: 0;
+}
+
+.cards-grid > .card + .card {
+  padding-left: 1.5rem;
+  margin-left: 1.5rem;
+  border-left: 1px solid var(--border);
 }
 
 .chart-header {
@@ -470,6 +503,99 @@
   color: var(--text);
 }
 
+/* Phones: tighter spacing, so the schedule grid and chart get more width */
+@media (max-width: 599px) {
+  .app {
+    gap: 0.75rem;
+    padding: 0.75rem 0.75rem 1.5rem;
+  }
+
+  .card,
+  .chart-section {
+    padding: 1rem;
+  }
+}
+
+/* Phones: smaller state / last change card */
+@media (max-width: 599px) {
+  .cards-grid {
+    padding: 1rem;
+  }
+
+  .cards-grid > .card + .card {
+    padding-left: 0.9rem;
+    margin-left: 0.9rem;
+  }
+
+  .cards-grid .card-label {
+    font-size: 0.68rem;
+  }
+
+  .state-value-container {
+    gap: 0.6rem;
+  }
+
+  .status-pulse-dot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .state-card .state-value {
+    font-size: 1.3rem;
+  }
+
+  .last-change-time {
+    font-size: 0.95rem;
+  }
+
+  .card .last-change-duration {
+    font-size: 0.8rem;
+  }
+
+  /* History stats as one block of rows: label + note on the left, value on the right */
+  .stats-grid {
+    gap: 0;
+    margin-bottom: 1rem;
+    padding: 0 0.9rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .stat-badge {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 0.75rem;
+    padding: 0.55rem 0;
+    background: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .stat-badge + .stat-badge {
+    border-top: 1px solid var(--border);
+  }
+
+  .stat-badge .stat-label {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .stat-badge .stat-sub {
+    grid-column: 1;
+    grid-row: 2;
+    margin-top: 0;
+  }
+
+  .stat-badge .stat-val {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    text-align: right;
+    white-space: nowrap;
+  }
+}
+
 @media (min-width: 600px) {
   .app {
     max-width: 800px;
@@ -477,11 +603,6 @@
     gap: 1.5rem;
   }
   
-  .cards-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-  }
-
   .stats-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
@@ -609,7 +730,7 @@
 
 .schedule-cell-half {
   flex: 1;
-  background: var(--glow-on);
+  background: var(--on-fill);
 }
 
 .schedule-cell-half[data-off] {
@@ -629,4 +750,92 @@
   margin: 1rem 0 0;
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+/* Phone view of the history: "Actual" and "Plan" lanes on one time scale (HistoryChart's TimelineLanes) */
+.timeline-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.timeline-lane {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+}
+
+.timeline-lane-label {
+  padding-right: 6px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.timeline-lane-track {
+  position: relative;
+  height: 18px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.timeline-lane-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.timeline-lane-segment[data-state="on"] {
+  background: var(--on-fill);
+}
+
+.timeline-lane-segment[data-state="off"] {
+  background: var(--off);
+}
+
+/* Like the chart's "No data" areas */
+.timeline-lane-segment[data-state="unknown"] {
+  background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+}
+
+.timeline-lane-ticks {
+  grid-column: 2;
+  position: relative;
+  height: 17px;
+}
+
+/* Positioned by placeSpanLabels (left = label's left edge) */
+.timeline-lane-tick {
+  position: absolute;
+  top: 0;
+  padding-top: 4px;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Every outage boundary, even when its label didn't fit */
+.timeline-lane-mark {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 3px;
+  margin-left: -0.5px;
+  background: var(--text-muted);
+}
+
+/* Phones in landscape get the desktop layout (wider than 600px) but are short: less padding */
+@media (min-width: 600px) and (max-height: 500px) {
+  .app {
+    padding: 1rem 1.5rem 1.5rem;
+    gap: 1rem;
+  }
 }

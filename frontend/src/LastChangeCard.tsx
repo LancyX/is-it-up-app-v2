@@ -32,18 +32,20 @@ export function LastChangeCard({ lastChange }: LastChangeCardProps) {
     )
   }
 
-  const gridState = normalizeState(lastChange.state)
+  // The new state isn't repeated here: it's the current state shown next to this card
+  const previousState = normalizeState(lastChange.previous_state)
 
   return (
     <section className="card">
       <span className="card-label">{t('lastChange.label')}</span>
       <p className="last-change-time">{formatTime(lastChange.last_changed, locale)}</p>
-      <p className="last-change-state" data-state={gridState}>
-        {t('lastChange.switchedTo')} {t(`state.${gridState}`)}
-      </p>
       {lastChange.previous_duration_sec !== undefined && (
-        <p className="last-change-duration text-muted" style={{ fontSize: '0.9em', marginTop: 4 }}>
-          {t('lastChange.was')} {t(`state.${normalizeState(lastChange.previous_state)}`)} {t('lastChange.for')} {formatDuration(lastChange.previous_duration_sec, t)}
+        <p className="last-change-duration text-muted">
+          {t('lastChange.was')}{' '}
+          <span className="last-change-state" data-state={previousState}>
+            {t(`state.${previousState}`)}
+          </span>{' '}
+          {t('lastChange.for')} {formatDuration(lastChange.previous_duration_sec, t)}
         </p>
       )}
     </section>

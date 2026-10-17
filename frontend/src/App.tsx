@@ -5,6 +5,7 @@ import './App.css'
 import { fetchState, fetchHistory, fetchLastChange, fetchSchedule } from './api'
 import type { State, History, LastChange, Schedule } from './api'
 import type { HistoryRange } from './utils'
+import { normalizeState } from './utils'
 import { StateCard } from './StateCard'
 import { HistoryChart } from './HistoryChart'
 import { LastChangeCard } from './LastChangeCard'
@@ -54,8 +55,30 @@ function App() {
 
   useEffect(() => {
     const id = setInterval(load, REFRESH_MS)
-    return () => clearInterval(id)
+    // Phones pause timers in background tabs: refresh as soon as the page is shown again,
+    // so a returning visitor doesn't see a stale state for up to REFRESH_MS
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') load()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [historyRange])
+
+  // The backend's last change ignores 'unavailable' blips; HA's raw last_changed doesn't
+  const shownState =
+    state && lastChange?.state && lastChange.last_changed
+      ? { ...state, state: lastChange.state, last_changed: lastChange.last_changed }
+      : state
+
+  // Tab title with the state, e.g. "🔴 Вимкнено · Чи є світло" (visible in the phone's tab list)
+  const gridState = shownState ? normalizeState(shownState.state) : null
+  useEffect(() => {
+    const icon = gridState === 'on' ? '🟢' : gridState === 'off' ? '🔴' : '⚪'
+    document.title = gridState ? `${icon} ${t(`state.${gridState}`)} · ${t('app.title')}` : t('app.title')
+  }, [gridState, locale])
 
   return (
     <div className="app">
@@ -99,14 +122,7 @@ function App() {
       {state && (
         <>
           <div className="cards-grid">
-            <StateCard
-              state={
-                // The backend's last change ignores 'unavailable' blips; HA's raw last_changed doesn't
-                lastChange?.state && lastChange.last_changed
-                  ? { ...state, state: lastChange.state, last_changed: lastChange.last_changed }
-                  : state
-              }
-            />
+            <StateCard state={shownState ?? state} />
             <LastChangeCard lastChange={lastChange} />
           </div>
           {schedule?.enabled && <ScheduleCard schedule={schedule} />}

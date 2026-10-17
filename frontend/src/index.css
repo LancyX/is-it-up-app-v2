@@ -10,6 +10,8 @@
   --off: #f43f5e;
   --shadow: rgba(15, 23, 42, 0.05);
   --glow-on: rgba(16, 185, 129, 0.2);
+  /* "Power on" in the schedule grid / lane */
+  --on-fill: rgba(16, 185, 129, 0.6);
   --glow-off: rgba(244, 63, 94, 0.2);
 }
 
@@ -25,6 +27,7 @@
   --off: #fb7185;
   --shadow: rgba(0, 0, 0, 0.2);
   --glow-on: rgba(52, 211, 153, 0.25);
+  --on-fill: rgba(52, 211, 153, 0.65);
   --glow-off: rgba(251, 113, 133, 0.25);
 }
 
@@ -35,6 +38,9 @@
 html {
   font-size: 16px;
   -webkit-tap-highlight-color: transparent;
+  /* iOS Safari enlarges text in landscape otherwise */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {

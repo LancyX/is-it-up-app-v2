@@ -5,7 +5,6 @@ import './App.css'
 import { fetchState, fetchHistory, fetchLastChange, fetchSchedule } from './api'
 import type { State, History, LastChange, Schedule } from './api'
 import type { HistoryRange } from './utils'
-import { normalizeState } from './utils'
 import { StateCard } from './StateCard'
 import { HistoryChart } from './HistoryChart'
 import { LastChangeCard } from './LastChangeCard'
@@ -73,12 +72,11 @@ function App() {
       ? { ...state, state: lastChange.state, last_changed: lastChange.last_changed }
       : state
 
-  // Tab title with the state, e.g. "🔴 Вимкнено · Чи є світло" (visible in the phone's tab list)
-  const gridState = shownState ? normalizeState(shownState.state) : null
+  // Tab title in the page's language. No state in it: phones freeze background tabs, so it would
+  // show a stale state in the tab list.
   useEffect(() => {
-    const icon = gridState === 'on' ? '🟢' : gridState === 'off' ? '🔴' : '⚪'
-    document.title = gridState ? `${icon} ${t(`state.${gridState}`)} · ${t('app.title')}` : t('app.title')
-  }, [gridState, locale])
+    document.title = t('app.title')
+  }, [locale])
 
   return (
     <div className="app">

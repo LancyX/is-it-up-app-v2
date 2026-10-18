@@ -29,8 +29,9 @@ Home Assistant knows when the power goes out, but you don't want to give neighbo
 - **Actual history** — today, yesterday, or the last 6 h … 7 days, with availability, total time without power, number of outages and their average length.
   - On a computer: a step chart with a **Plan** lane under it, so you can see at a glance whether outages followed the schedule.
   - On a phone: two compact lanes, **Actual** and **Plan**, on one time scale. Turn the phone to landscape to get the full chart.
+  - **All periods** — an expandable list with every on/off period in the range: start – end, state, duration.
   - Outage start/end times are labelled under both, in pairs (never just a start or just an end); outages too short for a label still get a tick mark.
-- **Phone-friendly** — compact layout, no hover-only UI, refreshes as soon as you come back to the tab, state in the tab title (🟢 / 🔴), and can be added to the home screen as an app.
+- **Phone-friendly** — compact layout, no hover-only UI, refreshes as soon as you come back to the tab, and can be added to the home screen as an app.
 - Light / dark theme (follows the system), English / Ukrainian, refreshes every 30 s.
 
 ## How it works

@@ -37,10 +37,6 @@ const LANE_LABEL_SPACING = 6 // px between neighbouring labels; ones that would 
 const LABEL_CHAR_WIDTH = 6.2 // px per character at 11px, to estimate label widths
 const LABEL_EDGE = 16 // px; labels closer to a lane edge are aligned to it instead of centred
 
-// Touch screens: no tooltip. It pops up while scrolling past the chart and then sticks over it;
-// the change times are on the axis anyway.
-const CAN_HOVER = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover)').matches
-
 // Phones (App.css's breakpoint): two compact lanes, actual and planned, instead of the chart.
 // Tracked live, so turning a phone to landscape switches to the full chart.
 const PHONE_QUERY = '(max-width: 599px)'
@@ -496,10 +492,12 @@ export function HistoryChart({
     new Date(time).toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' })
 
   // Actual times may need a date (multi-day ranges); a range's end then drops it if on the same day
+  // An end on the start's day doesn't repeat the date
+  const formatEnd = (start: number, end: number) =>
+    new Date(start).toDateString() === new Date(end).toDateString() ? formatClock(end) : formatTime(end)
   const factFormat: LabelFormat = {
     time: formatTime,
-    range: (start, end) =>
-      `${formatTime(start)}–${new Date(start).toDateString() === new Date(end).toDateString() ? formatClock(end) : formatTime(end)}`,
+    range: (start, end) => `${formatTime(start)}–${formatEnd(start, end)}`,
   }
   const planFormat: LabelFormat = { time: formatClock, range: (start, end) => `${formatClock(start)}–${formatClock(end)}` }
 
@@ -560,6 +558,25 @@ export function HistoryChart({
               {stats.outageCount > 0 ? `${t('stats.avg_duration')}: ${formatDuration(stats.avgOutageSec, t)}` : '—'}
             </span>
           </div>
+
+          {/* Every on/off period in the range as rows, newest first; collapsed by default */}
+          <details className="segments-list">
+            <summary className="segments-summary">
+              {t('history.segments')} · {factSegments.length}
+            </summary>
+            <ul className="segments-rows">
+              {[...factSegments].reverse().map((s) => (
+                <li key={s.start} className="segments-row" data-state={s.state}>
+                  <span className="segments-dot" aria-hidden />
+                  <span className="segments-time">
+                    {formatTime(s.start)} – {live && s.end === now ? t('history.now') : formatEnd(s.start, s.end)}
+                  </span>
+                  <span className="segments-state">{s.state === 'unknown' ? t('history.no_data') : t(`state.${s.state}`)}</span>
+                  <span className="segments-duration">{formatDuration((s.end - s.start) / 1000, t)}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       )}
 
@@ -706,7 +723,8 @@ export function HistoryChart({
               stroke="var(--border)"
               width={52}
             />
-            {CAN_HOVER && (
+            {/* Only the full chart has a tooltip (desktop, tablet, phone in landscape) */}
+            {!isPhone && (
               <Tooltip
                 cursor={false}
                 content={({ active, payload }) => {

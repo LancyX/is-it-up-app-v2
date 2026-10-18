@@ -356,6 +356,99 @@
   flex-shrink: 0;
 }
 
+/* History: expandable list of on/off periods, the last item of the stats grid */
+.segments-list {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.segments-summary {
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.segments-summary::-webkit-details-marker {
+  display: none;
+}
+
+.segments-summary::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: 0.4rem;
+  font-size: 0.65rem;
+  transition: transform 0.2s;
+  color: var(--text-muted);
+}
+
+.segments-list[open] .segments-summary::before {
+  transform: rotate(90deg);
+}
+
+.segments-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0.9rem 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.segments-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  font-size: 0.85rem;
+}
+
+.segments-row + .segments-row {
+  border-top: 1px solid var(--border);
+}
+
+.segments-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.segments-row[data-state="on"] .segments-dot {
+  background: var(--on);
+}
+
+.segments-row[data-state="off"] .segments-dot {
+  background: var(--off);
+}
+
+.segments-time {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.segments-state {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+
+.segments-row[data-state="off"] .segments-state {
+  color: var(--off);
+}
+
+.segments-duration {
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
 .contacts-spoiler {
   margin-top: 0.75rem;
   border: 1px solid var(--border);
@@ -593,6 +686,22 @@
     grid-row: 1 / span 2;
     text-align: right;
     white-space: nowrap;
+  }
+
+  /* The periods list is one more row of that block */
+  .segments-list {
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: none;
+  }
+
+  .segments-summary {
+    padding: 0.6rem 0;
+  }
+
+  .segments-rows {
+    padding: 0.25rem 0 0.5rem;
   }
 }
 

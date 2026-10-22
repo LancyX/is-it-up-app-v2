@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 ARG VITE_CONTACT_EMAIL
 ARG VITE_GITHUB_REPO_URL

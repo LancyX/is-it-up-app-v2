@@ -8,9 +8,13 @@ services:
       - HA_BASE_URL=${HA_BASE_URL:-http://host.docker.internal:8123}
       - HA_TOKEN=${HA_TOKEN}
       - GRID_ENTITY_ID=${GRID_ENTITY_ID:-binary_sensor.grid_power}
-      - SCHEDULE_ENTITY_ID=${SCHEDULE_ENTITY_ID:-}
-      - SCHEDULE_CALENDAR_ID=${SCHEDULE_CALENDAR_ID:-}
-      - SCHEDULE_API_URL=${SCHEDULE_API_URL-https://svitlo-proxy.svitlo-proxy.workers.dev}
+      - SCHEDULE_REGION=${SCHEDULE_REGION:-}
+      - SCHEDULE_QUEUE=${SCHEDULE_QUEUE:-}
+      - SCHEDULE_API_URL=${SCHEDULE_API_URL:-https://svitlo-proxy.svitlo-proxy.workers.dev}
+      - SCHEDULE_EMERGENCY_API_URL=${SCHEDULE_EMERGENCY_API_URL-https://dtek-api.svitlo-proxy.workers.dev/}
+      - DATA_DIR=/data
+    volumes:
+      - schedule-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -28,3 +32,6 @@ services:
     restart: always
     depends_on:
       - backend
+
+volumes:
+  schedule-data:

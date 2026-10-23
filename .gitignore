@@ -3,6 +3,9 @@
 .env.local
 *.local
 
+# Recorded schedule (DATA_DIR)
+backend/data/
+
 # Python
 __pycache__/
 *.py[cod]

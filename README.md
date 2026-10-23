@@ -38,16 +38,16 @@ Home Assistant knows when the power goes out, but you don't want to give neighbo
 
 ```
 Browser ──► nginx (frontend, :3033) ──/api──► FastAPI (backend, :8033) ──REST──► Home Assistant
+                                                                    └──────► svitlo.live API
 ```
 
-- The **backend** is a thin proxy over the Home Assistant REST API (`/api/states`, `/api/history/period`, `/api/calendars`). The browser never sees the HA token.
+- The **backend** is a thin proxy over the Home Assistant REST API (`/api/states`, `/api/history/period`). The browser never sees the HA token.
 - **Grid sensor** — any HA `binary_sensor` whose state is `on` when there's power and `off` when there isn't. For example: a template sensor built from a UPS "on battery" status, a ping sensor for a device that isn't on backup power, or a smart plug's availability.
 - **History** comes from the HA recorder, so how far back you can look is HA's `purge_keep_days` (10 days by default), not something this app controls. Time before the sensor's first record is shown as "No data" — never guessed.
-- **Schedule** comes from the [svitlo.live](https://github.com/chaichuk/svitlo_live) HACS integration (covers Ukraine, including Kyiv region / DTEK, where DTEK itself has no public API):
-  - today/tomorrow are read from its status sensor;
-  - the sensor doesn't say which date its schedule is for (after midnight it keeps yesterday's until the new day is published), so the backend checks it against the integration's calendar, which has real dates;
-  - days the integration doesn't have yet are fetched straight from the svitlo.live API (the integration's upstream for Kyiv region can lag a day behind the site);
-  - past days come from the calendar's recorded state in HA history — the schedule as it was in effect at the time. That history starts when you install the integration.
+- **Schedule** comes straight from the svitlo.live API (the one behind [svitlo.live](https://svitlo.live) and its [HA integration](https://github.com/chaichuk/svitlo_live); covers Ukraine, including Kyiv region / DTEK, where DTEK itself has no public API). No HA integration needed:
+  - the backend fetches it every 5 minutes;
+  - every version of each day it sees is saved to `data/schedule.json` (a Docker volume), so past days show the schedule as it was in effect at the time — including changes during the day. That history starts when you first run the app with the schedule configured;
+  - the emergency outages flag comes from the DTEK proxy that the HA integration uses (ignored when it's out of date).
 
 ## Setup
 
@@ -55,12 +55,11 @@ Browser ──► nginx (frontend, :3033) ──/api──► FastAPI (backend, 
 
 1. A grid power `binary_sensor` (see above).
 2. A long-lived access token: your HA profile → **Security** → **Long-lived access tokens**.
-3. *(Optional, for the schedule)* Install [svitlo.live](https://github.com/chaichuk/svitlo_live) via HACS and add your region and queue. It creates entities like `sensor.svitlo_kiivska_oblast_5_1_electricity` and `calendar.svitlo_kiivska_oblast_5_1_outages_schedule`.
 
 ### 2. Run with Docker
 
 ```bash
-cp .env.example .env   # then fill in HA_BASE_URL, HA_TOKEN, GRID_ENTITY_ID (+ SCHEDULE_ENTITY_ID)
+cp .env.example .env   # then fill in HA_BASE_URL, HA_TOKEN, GRID_ENTITY_ID (+ SCHEDULE_REGION, SCHEDULE_QUEUE)
 docker compose up -d --build
 ```
 
@@ -76,9 +75,11 @@ If the backend runs in Docker and HA is on the host's LAN, use `http://host.dock
 | `HA_BASE_URL` | Home Assistant URL | `http://192.168.1.10:8123` |
 | `HA_TOKEN` | Long-lived access token | — |
 | `GRID_ENTITY_ID` | Grid power binary sensor | `binary_sensor.grid_power` |
-| `SCHEDULE_ENTITY_ID` | *Optional.* svitlo.live status sensor; enables the schedule card and the Plan lane | `sensor.svitlo_kiivska_oblast_5_1_electricity` |
-| `SCHEDULE_CALENDAR_ID` | *Optional.* svitlo.live calendar, used to date the schedule and for past days. Derived from `SCHEDULE_ENTITY_ID` if unset | `calendar.svitlo_kiivska_oblast_5_1_outages_schedule` |
-| `SCHEDULE_API_URL` | *Optional.* svitlo.live API, queried directly for days the integration doesn't have yet (its upstream can lag). Empty = HA only | `https://svitlo-proxy.svitlo-proxy.workers.dev` (default) |
+| `SCHEDULE_REGION` | *Optional.* Region id as in the svitlo.live API (`cpu`: `kyiv`, `kiivska-oblast`, `lvivska-oblast`, `harkivska-oblast`, …); with `SCHEDULE_QUEUE`, enables the schedule card and the Plan lane | `kiivska-oblast` |
+| `SCHEDULE_QUEUE` | *Optional.* Your queue | `5.1` |
+| `SCHEDULE_API_URL` | *Optional.* svitlo.live API | `https://svitlo-proxy.svitlo-proxy.workers.dev` (default) |
+| `SCHEDULE_EMERGENCY_API_URL` | *Optional.* DTEK proxy, only for the emergency outages flag. Empty = never shown | `https://dtek-api.svitlo-proxy.workers.dev/` (default) |
+| `DATA_DIR` | Where the recorded schedule is kept | `data` (`/data`, a volume, in Docker) |
 
 **Frontend** (optional, baked in at build time; passed as Docker build args)
 

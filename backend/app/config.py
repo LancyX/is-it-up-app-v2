@@ -5,12 +5,15 @@ class Settings(BaseSettings):
     ha_base_url: str = "http://homeassistant.local:8123"
     ha_token: str = ""
     grid_entity_id: str = "binary_sensor.grid_power"
-    # Optional svitlo.live status sensor (sensor.svitlo_<region>_<queue>_electricity); empty = no schedule
-    schedule_entity_id: str = ""
-    # Its calendar entity; empty = derived from schedule_entity_id (calendar.svitlo_<region>_<queue>_outages_schedule)
-    schedule_calendar_id: str = ""
-    # svitlo.live API, used directly for days the HA integration doesn't have (it can lag); empty = HA only
+    # Optional outage schedule from svitlo.live: region id as in its API (e.g. kiivska-oblast) and
+    # queue (e.g. 5.1); either empty = no schedule
+    schedule_region: str = ""
+    schedule_queue: str = ""
     schedule_api_url: str = "https://svitlo-proxy.svitlo-proxy.workers.dev"
+    # DTEK proxy, only for its emergency outages flag; empty = never shown
+    schedule_emergency_api_url: str = "https://dtek-api.svitlo-proxy.workers.dev/"
+    # Where past schedules are recorded (schedule.json)
+    data_dir: str = "data"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 

@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app import ha_client
+from app import ha_client, schedule
 
 # Run sync HA calls in thread pool to not block event loop
 import asyncio
@@ -21,9 +21,22 @@ async def run_sync(fn, *args, **kwargs):
     return await loop.run_in_executor(_executor, lambda: fn(*args, **kwargs))
 
 
+async def poll_schedule():
+    """Fetch the schedule regularly, also with nobody watching, so past days get recorded."""
+    while True:
+        try:
+            await run_sync(schedule.refresh)
+        except Exception:
+            pass  # try again next time; /api/schedule keeps serving the last fetch
+        await asyncio.sleep(schedule.POLL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    poller = asyncio.create_task(poll_schedule()) if schedule.enabled() else None
     yield
+    if poller:
+        poller.cancel()
     _executor.shutdown(wait=True)
 
 
@@ -99,7 +112,7 @@ async def get_history(
     try:
         data = await run_sync(ha_client.get_history, start, end)
         try:
-            schedule_history = await run_sync(ha_client.get_schedule_history, start, end)
+            schedule_history = await run_sync(schedule.get_schedule_history, start, end)
         except Exception:
             schedule_history = None  # optional: never fail the grid history because of it
         return {
@@ -114,7 +127,7 @@ async def get_history(
                 }
                 for h in data
             ],
-            # Planned outages recorded before today (see get_schedule_history)
+            # Planned outages before today, as recorded (see schedule.get_schedule_history)
             "schedule_history": schedule_history,
         }
     except Exception as e:
@@ -135,7 +148,7 @@ async def get_last_change():
 async def get_schedule():
     """Planned outage schedule (svitlo.live); `{"enabled": false}` if not configured."""
     try:
-        data = await run_sync(ha_client.get_schedule)
+        data = await run_sync(schedule.get_schedule)
         return {"enabled": False} if data is None else {"enabled": True, **data}
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Home Assistant error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"svitlo.live error: {str(e)}")

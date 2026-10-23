@@ -1,6 +1,7 @@
 """Home Assistant API client - fetches state and history for Grid Power entity."""
 
 from datetime import date, datetime, time, timedelta, timezone
+from time import monotonic
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -170,22 +171,59 @@ def _get_calendar_outages(calendar_id: str, start: datetime, end: datetime) -> s
     }
 
 
-def _schedule_days(attrs: dict[str, Any], base: date) -> tuple[dict[date, bool], list[tuple[datetime, datetime]]]:
-    """Published flag per day and merged outages, assuming `today_48half` belongs to `base`."""
-    published_days: dict[date, bool] = {}
-    outages: list[tuple[datetime, datetime]] = []
+def _ha_schedule_slots(attrs: dict[str, Any], base: date) -> dict[date, list[str]]:
+    """Slots of the published days, assuming `today_48half` belongs to `base`."""
+    slots_by_day: dict[date, list[str]] = {}
     for offset, key in ((0, "today_48half"), (1, "tomorrow_48half")):
-        day = base + timedelta(days=offset)
         slots = attrs.get(key) or []
         # An all-'unknown' list means no schedule was published for that day
-        published_days[day] = any(s in ("on", "off") for s in slots)
-        if published_days[day]:
-            day_outages = _slots_to_outages(slots, day)
-            # An outage over midnight continues into the next day's first slot
-            if outages and day_outages and outages[-1][1] == day_outages[0][0]:
-                outages[-1] = (outages[-1][0], day_outages.pop(0)[1])
-            outages.extend(day_outages)
-    return published_days, outages
+        if any(s in ("on", "off") for s in slots):
+            slots_by_day[base + timedelta(days=offset)] = slots
+    return slots_by_day
+
+
+def _merge_outages(slots_by_day: dict[date, list[str]]) -> list[tuple[datetime, datetime]]:
+    outages: list[tuple[datetime, datetime]] = []
+    for day, slots in sorted(slots_by_day.items()):
+        day_outages = _slots_to_outages(slots, day)
+        # An outage over midnight continues into the next day's first slot
+        if outages and day_outages and outages[-1][1] == day_outages[0][0]:
+            outages[-1] = (outages[-1][0], day_outages.pop(0)[1])
+        outages.extend(day_outages)
+    return outages
+
+
+# The svitlo.live API's region ids differ from the integration's for a few regions
+API_REGION_ALIASES = {
+    "kharkivska-oblast": "harkivska-oblast",
+    "khmelnytska-oblast": "hmelnitska-oblast",
+    "chernihivska-oblast": "chernigivska-oblast",
+    "zhytomyrska-oblast": "jitomirska-oblast",
+}
+API_SLOT_STATES = {1: "on", 2: "off"}  # 0 = not published
+API_CACHE_SECONDS = 300
+_api_cache: tuple[float, dict[str, Any]] | None = None
+
+
+def _get_api_schedule(region: str, queue: str) -> dict[date, list[str]]:
+    """Published days for a region/queue straight from the svitlo.live API (cached)."""
+    global _api_cache
+    now = monotonic()
+    if _api_cache is None or now - _api_cache[0] > API_CACHE_SECONDS:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(settings.schedule_api_url)
+            resp.raise_for_status()
+            _api_cache = (now, resp.json())
+    region_id = API_REGION_ALIASES.get(region, region)
+    entry = next((r for r in _api_cache[1].get("regions", []) if r.get("cpu") == region_id), None)
+    days = ((entry or {}).get("schedule") or {}).get(queue) or {}
+    slots_by_day: dict[date, list[str]] = {}
+    for day, slots in days.items():
+        # {"00:00": 1, "00:30": 1, …}: 48 half-hour slots from Kyiv midnight
+        states = [API_SLOT_STATES.get(v, "unknown") for _, v in sorted((slots or {}).items())]
+        if len(states) == 48 and any(s != "unknown" for s in states):
+            slots_by_day[date.fromisoformat(day)] = states
+    return slots_by_day
 
 
 def get_schedule() -> dict[str, Any] | None:
@@ -209,13 +247,29 @@ def get_schedule() -> dict[str, Any] | None:
                 datetime.combine(today - timedelta(days=1), time(0), SCHEDULE_TZ),
                 datetime.combine(today + timedelta(days=2), time(0), SCHEDULE_TZ),
             )
-            base = next((c for c in candidates if set(_schedule_days(attrs, c)[1]) == calendar), today)
+            base = next(
+                (c for c in candidates if set(_merge_outages(_ha_schedule_slots(attrs, c))) == calendar), today
+            )
         except Exception:
             pass  # calendar unavailable: assume the schedule is today's
-    published_days, outages = _schedule_days(attrs, base)
+    slots_by_day = _ha_schedule_slots(attrs, base)
+
+    # The integration can lag behind svitlo.live (its upstream may not have the new day yet):
+    # fill the days it doesn't have from the API directly.
+    from_api = False
+    if settings.schedule_api_url and attrs.get("region") and attrs.get("queue"):
+        try:
+            for day, slots in _get_api_schedule(attrs["region"], str(attrs["queue"])).items():
+                if day not in slots_by_day:
+                    slots_by_day[day] = slots
+                    from_api = from_api or day >= today
+        except Exception:
+            pass  # optional: keep what HA has
+    outages = _merge_outages(slots_by_day)
 
     # Always report today and tomorrow (unpublished if svitlo.live has nothing for them yet),
     # plus a stale yesterday so the history chart can still show it.
+    published_days = {day: True for day in slots_by_day}
     for day in (today, today + timedelta(days=1)):
         published_days.setdefault(day, False)
     days = [
@@ -235,7 +289,7 @@ def get_schedule() -> dict[str, Any] | None:
         "region": attrs.get("region"),
         # State 'Emergency' = emergency outages are in effect and the schedule may not be followed
         "emergency": entity.get("state") == "Emergency",
-        "available": entity.get("state") not in ("No data", "unavailable", "unknown"),
+        "available": from_api or entity.get("state") not in ("No data", "unavailable", "unknown"),
         "updated": attrs.get("updated"),
         "days": days,
         "outages": [{"start": s.isoformat(), "end": e.isoformat()} for s, e in outages],

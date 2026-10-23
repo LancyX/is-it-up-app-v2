@@ -46,6 +46,7 @@ Browser ──► nginx (frontend, :3033) ──/api──► FastAPI (backend, 
 - **Schedule** comes from the [svitlo.live](https://github.com/chaichuk/svitlo_live) HACS integration (covers Ukraine, including Kyiv region / DTEK, where DTEK itself has no public API):
   - today/tomorrow are read from its status sensor;
   - the sensor doesn't say which date its schedule is for (after midnight it keeps yesterday's until the new day is published), so the backend checks it against the integration's calendar, which has real dates;
+  - days the integration doesn't have yet are fetched straight from the svitlo.live API (the integration's upstream for Kyiv region can lag a day behind the site);
   - past days come from the calendar's recorded state in HA history — the schedule as it was in effect at the time. That history starts when you install the integration.
 
 ## Setup
@@ -77,6 +78,7 @@ If the backend runs in Docker and HA is on the host's LAN, use `http://host.dock
 | `GRID_ENTITY_ID` | Grid power binary sensor | `binary_sensor.grid_power` |
 | `SCHEDULE_ENTITY_ID` | *Optional.* svitlo.live status sensor; enables the schedule card and the Plan lane | `sensor.svitlo_kiivska_oblast_5_1_electricity` |
 | `SCHEDULE_CALENDAR_ID` | *Optional.* svitlo.live calendar, used to date the schedule and for past days. Derived from `SCHEDULE_ENTITY_ID` if unset | `calendar.svitlo_kiivska_oblast_5_1_outages_schedule` |
+| `SCHEDULE_API_URL` | *Optional.* svitlo.live API, queried directly for days the integration doesn't have yet (its upstream can lag). Empty = HA only | `https://svitlo-proxy.svitlo-proxy.workers.dev` (default) |
 
 **Frontend** (optional, baked in at build time; passed as Docker build args)
 

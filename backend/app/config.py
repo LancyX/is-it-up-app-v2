@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     schedule_entity_id: str = ""
     # Its calendar entity; empty = derived from schedule_entity_id (calendar.svitlo_<region>_<queue>_outages_schedule)
     schedule_calendar_id: str = ""
+    # svitlo.live API, used directly for days the HA integration doesn't have (it can lag); empty = HA only
+    schedule_api_url: str = "https://svitlo-proxy.svitlo-proxy.workers.dev"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 

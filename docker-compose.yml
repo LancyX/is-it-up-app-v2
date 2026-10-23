@@ -10,6 +10,7 @@ services:
       - GRID_ENTITY_ID=${GRID_ENTITY_ID:-binary_sensor.grid_power}
       - SCHEDULE_ENTITY_ID=${SCHEDULE_ENTITY_ID:-}
       - SCHEDULE_CALENDAR_ID=${SCHEDULE_CALENDAR_ID:-}
+      - SCHEDULE_API_URL=${SCHEDULE_API_URL-https://svitlo-proxy.svitlo-proxy.workers.dev}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

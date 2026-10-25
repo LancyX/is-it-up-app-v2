@@ -308,8 +308,8 @@ export function HistoryChart({
     return ranges
   }, [timeline])
 
-  // Planned schedule (svitlo.live) for a separate lane under the time axis, clipped to the
-  // visible range: the current schedule's published days, plus what HA recorded before today.
+  // Planned schedule (DTEK) for a separate lane under the time axis, clipped to the visible
+  // range: the current schedule's published days, plus what the backend recorded before today.
   // `covered` = where the plan is known; elsewhere the lane stays empty.
   const scheduleLane = useMemo(() => {
     const clip = (list: Interval[]) =>

@@ -11,8 +11,8 @@ services:
       - SCHEDULE_REGION=${SCHEDULE_REGION:-}
       - SCHEDULE_QUEUE=${SCHEDULE_QUEUE:-}
       - SCHEDULE_DTEK_URL=${SCHEDULE_DTEK_URL:-}
-      - SCHEDULE_API_URL=${SCHEDULE_API_URL:-https://svitlo-proxy.svitlo-proxy.workers.dev}
       - SCHEDULE_EMERGENCY_API_URL=${SCHEDULE_EMERGENCY_API_URL-https://dtek-api.svitlo-proxy.workers.dev/}
+      - ADDRESS_ENTITY_ID=${ADDRESS_ENTITY_ID:-}
       - DATA_DIR=/data
     volumes:
       - schedule-data:/data

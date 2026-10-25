@@ -2,16 +2,16 @@ import { useState, useEffect } from 'react'
 import { useTheme } from './theme'
 import { useTranslations } from './i18n'
 import './App.css'
-import { fetchState, fetchHistory, fetchLastChange, fetchSchedule } from './api'
-import type { State, History, LastChange, Schedule, ScheduleSource } from './api'
+import { fetchState, fetchHistory, fetchLastChange, fetchSchedule, fetchAddress } from './api'
+import type { State, History, LastChange, Schedule, AddressStatus } from './api'
 import type { HistoryRange } from './utils'
 import { StateCard } from './StateCard'
 import { HistoryChart } from './HistoryChart'
 import { LastChangeCard } from './LastChangeCard'
 import { ScheduleCard } from './ScheduleCard'
+import { DtekNotices } from './DtekNotices'
 
 const REFRESH_MS = 30_000
-const SCHEDULE_SOURCE_KEY = 'schedule-source'
 const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL ?? ''
 const GITHUB_REPO_URL = import.meta.env.VITE_GITHUB_REPO_URL ?? ''
 
@@ -22,29 +22,25 @@ function App() {
   const [history, setHistory] = useState<History | null>(null)
   const [lastChange, setLastChange] = useState<LastChange | null>(null)
   const [schedule, setSchedule] = useState<Schedule | null>(null)
+  const [address, setAddress] = useState<AddressStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [historyRange, setHistoryRange] = useState<HistoryRange>('today')
   const [contactsOpen, setContactsOpen] = useState(false)
-  // Picked in the schedule card's footer; null = the backend's default (DTEK)
-  const [scheduleSource, setScheduleSource] = useState<ScheduleSource | null>(
-    () => localStorage.getItem(SCHEDULE_SOURCE_KEY) as ScheduleSource | null,
-  )
-  const changeScheduleSource = (source: ScheduleSource) => {
-    localStorage.setItem(SCHEDULE_SOURCE_KEY, source)
-    setScheduleSource(source)
-  }
 
   const load = async () => {
     setError(null)
-    // The schedule is optional: its failure must not hide the grid state
-    fetchSchedule(scheduleSource)
+    // The schedule and the address status are optional: their failure must not hide the grid state
+    fetchSchedule()
       .then(setSchedule)
       .catch(() => setSchedule(null))
+    fetchAddress()
+      .then(setAddress)
+      .catch(() => setAddress(null))
     try {
       const [stateRes, historyRes, lastRes] = await Promise.all([
         fetchState(),
-        fetchHistory(historyRange, scheduleSource),
+        fetchHistory(historyRange),
         fetchLastChange(),
       ])
       setState(stateRes)
@@ -59,7 +55,7 @@ function App() {
 
   useEffect(() => {
     load()
-  }, [historyRange, scheduleSource])
+  }, [historyRange])
 
   useEffect(() => {
     const id = setInterval(load, REFRESH_MS)
@@ -73,7 +69,7 @@ function App() {
       clearInterval(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [historyRange, scheduleSource])
+  }, [historyRange])
 
   // The backend's last change ignores 'unavailable' blips; HA's raw last_changed doesn't
   const shownState =
@@ -132,7 +128,8 @@ function App() {
             <StateCard state={shownState ?? state} />
             <LastChangeCard lastChange={lastChange} />
           </div>
-          {schedule?.enabled && <ScheduleCard schedule={schedule} onSourceChange={changeScheduleSource} />}
+          <DtekNotices address={address} emergency={!!schedule?.emergency} />
+          {schedule?.enabled && <ScheduleCard schedule={schedule} />}
           <section className="chart-section">
             <div className="chart-header">
               <div>

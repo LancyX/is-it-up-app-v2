@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import type { Schedule, ScheduleSource } from './api'
+import { useEffect, useState } from 'react'
+import type { Schedule } from './api'
 import { useTranslations } from './i18n'
 import type { Locale } from './i18n'
 import { formatDuration, parseOutages } from './utils'
@@ -7,7 +7,6 @@ import type { Interval } from './utils'
 
 interface ScheduleCardProps {
   schedule: Schedule
-  onSourceChange: (source: ScheduleSource) => void
 }
 
 const localeTag = (locale: Locale) => (locale === 'uk' ? 'uk-UA' : 'en')
@@ -70,72 +69,7 @@ function buildHours(slots: Slot[]): HourCell[] {
   return hours
 }
 
-function SourceMenu({
-  source,
-  sources,
-  onChange,
-}: {
-  source: ScheduleSource
-  sources: ScheduleSource[]
-  onChange: (source: ScheduleSource) => void
-}) {
-  const { t } = useTranslations()
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLSpanElement>(null)
-
-  // Close on a click outside or Escape
-  useEffect(() => {
-    if (!open) return
-    const onPointer = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('pointerdown', onPointer)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onPointer)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  return (
-    <span className="schedule-source" ref={ref}>
-      <button
-        type="button"
-        className="schedule-source-button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={t('schedule.source')}
-        onClick={() => setOpen(!open)}
-      >
-        {t(`schedule.source.${source}`)} ▾
-      </button>
-      {open && (
-        <span className="schedule-source-menu" role="menu">
-          {sources.map((s) => (
-            <button
-              key={s}
-              type="button"
-              role="menuitemradio"
-              aria-checked={s === source}
-              className="schedule-source-option"
-              onClick={() => {
-                setOpen(false)
-                if (s !== source) onChange(s)
-              }}
-            >
-              {t(`schedule.source.${s}`)}
-            </button>
-          ))}
-        </span>
-      )}
-    </span>
-  )
-}
-
-export function ScheduleCard({ schedule, onSourceChange }: ScheduleCardProps) {
+export function ScheduleCard({ schedule }: ScheduleCardProps) {
   const { t, locale } = useTranslations()
   const [now, setNow] = useState(Date.now())
 
@@ -145,7 +79,6 @@ export function ScheduleCard({ schedule, onSourceChange }: ScheduleCardProps) {
   }, [])
 
   const outages = parseOutages(schedule)
-  const sources = schedule.sources ?? []
   // Days that haven't ended; the backend may also send yesterday (for the history chart)
   const days = (schedule.days ?? []).filter((d) => new Date(d.end).getTime() > now)
   const current = outages.find((o) => o.start <= now && now < o.end)
@@ -186,22 +119,10 @@ export function ScheduleCard({ schedule, onSourceChange }: ScheduleCardProps) {
     <section className="card schedule-card">
       <div className="schedule-header">
         <span className="card-label">{t('schedule.title')}</span>
-        <span className="schedule-badges">
-          {/* Pick another source to compare, e.g. when DTEK's plan looks off */}
-          {sources.length > 1 && schedule.source && (
-            <SourceMenu source={schedule.source} sources={sources} onChange={onSourceChange} />
-          )}
-          {schedule.queue && (
-            <span className="schedule-queue">{t('schedule.queue').replace('{queue}', schedule.queue)}</span>
-          )}
-        </span>
+        {schedule.queue && (
+          <span className="schedule-queue">{t('schedule.queue').replace('{queue}', schedule.queue)}</span>
+        )}
       </div>
-
-      {schedule.emergency && (
-        <p className="schedule-alert" role="status">
-          {t('schedule.emergency')}
-        </p>
-      )}
 
       <p className="schedule-summary" data-state={current ? 'off' : 'on'}>
         {summary}
@@ -283,10 +204,11 @@ export function ScheduleCard({ schedule, onSourceChange }: ScheduleCardProps) {
         )
       })}
 
-      <p className="schedule-updated">
-        {t('schedule.source')} {t(`schedule.source.${schedule.source ?? 'svitlo'}`)}
-        {schedule.updated && ` · ${t('schedule.updated').replace('{time}', formatUpdated(new Date(schedule.updated).getTime()))}`}
-      </p>
+      {schedule.updated && (
+        <p className="schedule-updated">
+          {t('schedule.updated').replace('{time}', formatUpdated(new Date(schedule.updated).getTime()))}
+        </p>
+      )}
     </section>
   )
 }

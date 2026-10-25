@@ -730,72 +730,6 @@
   gap: 0.5rem;
 }
 
-.schedule-badges {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-}
-
-/* Same pill as the queue, outlined: shows the current source, opens a menu of the others */
-.schedule-source {
-  position: relative;
-}
-
-.schedule-source-button {
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: calc(0.15rem - 1px) 0.6rem;
-  cursor: pointer;
-}
-
-.schedule-source-button:hover,
-.schedule-source-button[aria-expanded='true'] {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.schedule-source-menu {
-  position: absolute;
-  top: calc(100% + 0.3rem);
-  right: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  min-width: 100%;
-  padding: 0.25rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 0.6rem;
-  box-shadow: 0 4px 6px -1px var(--shadow), 0 2px 4px -1px var(--shadow);
-}
-
-.schedule-source-option {
-  font: inherit;
-  font-size: 0.8rem;
-  color: var(--text);
-  background: none;
-  border: none;
-  border-radius: 0.4rem;
-  padding: 0.35rem 0.6rem;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.schedule-source-option:hover {
-  background: var(--accent-dim);
-}
-
-.schedule-source-option[aria-checked='true'] {
-  color: var(--accent);
-  font-weight: 700;
-}
-
 .schedule-queue {
   font-size: 0.75rem;
   font-weight: 700;
@@ -805,14 +739,20 @@
   padding: 0.15rem 0.6rem;
 }
 
-.schedule-alert {
-  margin: 0.5rem 0 0;
-  padding: 0.5rem 0.75rem;
-  border-radius: 10px;
+.dtek-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0.6rem 1rem;
+  border-radius: 12px;
   font-size: 0.8rem;
-  font-weight: 600;
   color: var(--off);
   background: var(--glow-off);
+}
+
+.dtek-notice-details {
+  font-weight: 500;
 }
 
 .schedule-summary {
@@ -926,7 +866,6 @@
   font-size: 0.7rem;
   color: var(--text-muted);
 }
-
 
 /* Phone view of the history: "Actual" and "Plan" lanes on one time scale (HistoryChart's TimelineLanes) */
 .timeline-lanes {

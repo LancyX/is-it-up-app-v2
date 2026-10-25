@@ -110,3 +110,44 @@ def get_last_change() -> dict[str, Any] | None:
         pass
 
     return result
+
+
+# DTEK Monitor's sensors for one address, as suffixes of the configured "_outage_status" entity
+ADDRESS_STATUS_SUFFIX = "_outage_status"
+ADDRESS_SENSORS = ("outage_status", "outage_description", "outage_start", "outage_end", "dtek_connection")
+
+
+def get_address_status() -> dict[str, Any] | None:
+    """What DTEK reports for the address (an emergency/planned/stabilization outage, or "ok"),
+    from the DTEK Monitor integration. None if not configured."""
+    entity_id = settings.address_entity_id
+    if not entity_id:
+        return None
+    base = entity_id.removesuffix(ADDRESS_STATUS_SUFFIX)
+    states: dict[str, dict[str, Any]] = {}
+    with httpx.Client(timeout=10.0) as client:
+        for name in ADDRESS_SENSORS:
+            resp = client.get(f"{settings.ha_base_url.rstrip('/')}/api/states/{base}_{name}", headers=_headers())
+            if resp.status_code == 404:
+                continue
+            resp.raise_for_status()
+            states[name] = resp.json()
+
+    def value(name: str) -> str | None:
+        state = states.get(name, {}).get("state")
+        return None if state in (None, "unknown", "unavailable", "") else state
+
+    connection = states.get("dtek_connection", {})
+    return {
+        # ok / emergency / planned / stabilization; None = unknown (e.g. DTEK unreachable)
+        "status": value("outage_status"),
+        # DTEK's own wording, e.g. "Екстренні відключення"
+        "description": value("outage_description"),
+        "start": value("outage_start"),
+        # Estimated restoration
+        "end": value("outage_end"),
+        # Whether its last request to DTEK went through: otherwise "ok" may just be stale
+        "connected": value("dtek_connection") == "ok",
+        "checked_at": connection.get("attributes", {}).get("last_verified_at"),
+    }
+

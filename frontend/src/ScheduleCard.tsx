@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { Schedule } from './api'
+import { useEffect, useRef, useState } from 'react'
+import type { Schedule, ScheduleSource } from './api'
 import { useTranslations } from './i18n'
 import type { Locale } from './i18n'
 import { formatDuration, parseOutages } from './utils'
@@ -7,6 +7,7 @@ import type { Interval } from './utils'
 
 interface ScheduleCardProps {
   schedule: Schedule
+  onSourceChange: (source: ScheduleSource) => void
 }
 
 const localeTag = (locale: Locale) => (locale === 'uk' ? 'uk-UA' : 'en')
@@ -42,7 +43,99 @@ function buildSlots(start: number, end: number, outages: Interval[]): Slot[] {
   return slots
 }
 
-export function ScheduleCard({ schedule }: ScheduleCardProps) {
+interface HourCell extends Interval {
+  slots: Slot[]
+  // :00 and :30 halves, off if any of their slots is
+  halves: [boolean, boolean]
+}
+
+// Hour cells of two halves each, like DTEK's table. Grouped by the clock's hour: the schedule has
+// 48 wall-clock slots, so the hour repeated when clocks go back is one (two-hour) cell, not two.
+function buildHours(slots: Slot[]): HourCell[] {
+  const hours: HourCell[] = []
+  for (const slot of slots) {
+    const time = new Date(slot.start)
+    const half = time.getMinutes() < 30 ? 0 : 1
+    const last = hours[hours.length - 1]
+    if (last && new Date(last.start).getHours() === time.getHours()) {
+      last.end = slot.end
+      last.slots.push(slot)
+      last.halves[half] ||= slot.off
+    } else {
+      const halves: [boolean, boolean] = [false, false]
+      halves[half] = slot.off
+      hours.push({ start: slot.start, end: slot.end, slots: [slot], halves })
+    }
+  }
+  return hours
+}
+
+function SourceMenu({
+  source,
+  sources,
+  onChange,
+}: {
+  source: ScheduleSource
+  sources: ScheduleSource[]
+  onChange: (source: ScheduleSource) => void
+}) {
+  const { t } = useTranslations()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+
+  // Close on a click outside or Escape
+  useEffect(() => {
+    if (!open) return
+    const onPointer = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <span className="schedule-source" ref={ref}>
+      <button
+        type="button"
+        className="schedule-source-button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={t('schedule.source')}
+        onClick={() => setOpen(!open)}
+      >
+        {t(`schedule.source.${source}`)} ▾
+      </button>
+      {open && (
+        <span className="schedule-source-menu" role="menu">
+          {sources.map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="menuitemradio"
+              aria-checked={s === source}
+              className="schedule-source-option"
+              onClick={() => {
+                setOpen(false)
+                if (s !== source) onChange(s)
+              }}
+            >
+              {t(`schedule.source.${s}`)}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  )
+}
+
+export function ScheduleCard({ schedule, onSourceChange }: ScheduleCardProps) {
   const { t, locale } = useTranslations()
   const [now, setNow] = useState(Date.now())
 
@@ -52,6 +145,7 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
   }, [])
 
   const outages = parseOutages(schedule)
+  const sources = schedule.sources ?? []
   // Days that haven't ended; the backend may also send yesterday (for the history chart)
   const days = (schedule.days ?? []).filter((d) => new Date(d.end).getTime() > now)
   const current = outages.find((o) => o.start <= now && now < o.end)
@@ -64,6 +158,12 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
       ? clock
       : t('schedule.time_tomorrow').replace('{time}', clock)
   }
+
+  // "10:02", or "24 Oct, 21:15" when it's from another day (DTEK may not have updated today yet)
+  const formatUpdated = (time: number) =>
+    new Date(time).toDateString() === new Date(now).toDateString()
+      ? formatClock(time, locale)
+      : new Date(time).toLocaleString(localeTag(locale), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
   // What the schedule says about now: outage until X, or next outage at Y
   let summary: string
@@ -86,9 +186,15 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
     <section className="card schedule-card">
       <div className="schedule-header">
         <span className="card-label">{t('schedule.title')}</span>
-        {schedule.queue && (
-          <span className="schedule-queue">{t('schedule.queue').replace('{queue}', schedule.queue)}</span>
-        )}
+        <span className="schedule-badges">
+          {/* Pick another source to compare, e.g. when DTEK's plan looks off */}
+          {sources.length > 1 && schedule.source && (
+            <SourceMenu source={schedule.source} sources={sources} onChange={onSourceChange} />
+          )}
+          {schedule.queue && (
+            <span className="schedule-queue">{t('schedule.queue').replace('{queue}', schedule.queue)}</span>
+          )}
+        </span>
       </div>
 
       {schedule.emergency && (
@@ -128,9 +234,7 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
 
         const slots = buildSlots(start, end, outages)
         const offMs = slots.filter((s) => s.off).reduce((sum, s) => sum + s.end - s.start, 0)
-        // Hour cells of two half-hour slots each, like DTEK's table
-        const hours: Slot[][] = []
-        for (let i = 0; i < slots.length; i += 2) hours.push(slots.slice(i, i + 2))
+        const hours = buildHours(slots)
         const formatEnd = (time: number) => (time === end ? '24:00' : formatClock(time, locale))
         const stateLabel = (off: boolean) => (off ? t('schedule.off') : t('schedule.on'))
 
@@ -147,9 +251,7 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
             </div>
 
             <div className="schedule-grid">
-              {hours.map((halves) => {
-                const hourStart = halves[0].start
-                const hourEnd = halves[halves.length - 1].end
+              {hours.map(({ start: hourStart, end: hourEnd, slots: hourSlots, halves }) => {
                 const isCurrent = now >= hourStart && now < hourEnd
                 return (
                   <div
@@ -157,14 +259,14 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
                     className="schedule-cell"
                     data-current={isCurrent || undefined}
                     data-past={hourEnd <= now || undefined}
-                    title={halves
+                    title={hourSlots
                       .map((h) => `${formatClock(h.start, locale)}–${formatEnd(h.end)}: ${stateLabel(h.off)}`)
                       .join('\n')}
                   >
                     <span className="schedule-cell-hour">{new Date(hourStart).getHours().toString().padStart(2, '0')}</span>
                     <span className="schedule-cell-box">
-                      {halves.map((h) => (
-                        <span key={h.start} className="schedule-cell-half" data-off={h.off || undefined} />
+                      {halves.map((off, i) => (
+                        <span key={i} className="schedule-cell-half" data-off={off || undefined} />
                       ))}
                       {isCurrent && (
                         <span
@@ -181,11 +283,10 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
         )
       })}
 
-      {schedule.updated && (
-        <p className="schedule-updated">
-          {t('schedule.updated').replace('{time}', formatClock(new Date(schedule.updated).getTime(), locale))}
-        </p>
-      )}
+      <p className="schedule-updated">
+        {t('schedule.source')} {t(`schedule.source.${schedule.source ?? 'svitlo'}`)}
+        {schedule.updated && ` · ${t('schedule.updated').replace('{time}', formatUpdated(new Date(schedule.updated).getTime()))}`}
+      </p>
     </section>
   )
 }

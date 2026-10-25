@@ -1,4 +1,5 @@
-"""Planned outage schedule straight from the svitlo.live API, with past days kept on disk."""
+"""Planned outage schedule from DTEK's data (via outage-data-ua) or svitlo.live, with past days
+kept on disk per source."""
 
 import json
 import os
@@ -12,14 +13,24 @@ import httpx
 
 from app.config import settings
 
-# svitlo.live publishes slots in Kyiv time: 48 half-hour slots per day from local midnight,
-# {"00:00": 1, "00:30": 1, …} with 0 = not published, 1 = power on, 2 = outage.
+# Both sources publish wall-clock Kyiv time; slots are kept as 48 half-hour digits per day from
+# local midnight: 0 = not published, 1 = power on, 2 = outage.
 SCHEDULE_TZ = ZoneInfo("Europe/Kyiv")
 OFF = "2"
 POLL_SECONDS = 300
 KEEP_DAYS = 14  # history ranges go back at most 7 days (MAX_HISTORY_HOURS)
 
-# The emergency flag only exists in the DTEK proxy, which spells a few regions differently
+# DTEK's own schedule, scraped from its sites by github.com/Baskerville42/outage-data-ua (the sites
+# themselves are behind bot protection); the first is the default, the other is for comparison
+SOURCES = ("dtek", "svitlo")
+DTEK_FILES = {"kiivska-oblast": "kyiv-region", "kyiv": "kyiv", "dnipropetrovska-oblast": "dnipro", "odeska-oblast": "odesa"}
+DTEK_URL = "https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data/{file}.json"
+# Per hour "1".."24" (1 = 00:00–01:00): its two half-hours. "maybe"/"mfirst"/"msecond" (possible
+# outage) only appear in DTEK's weekly template, not in the actual schedule; count them as on.
+DTEK_HOUR_SLOTS = {"yes": "11", "no": "22", "first": "21", "second": "12"}
+
+# The emergency flag only exists in the DTEK proxy behind svitlo.live, which spells a few regions
+# differently
 EMERGENCY_REGION_ALIASES = {
     "harkivska-oblast": "kharkivska-oblast",
     "hmelnitska-oblast": "khmelnytska-oblast",
@@ -28,27 +39,40 @@ EMERGENCY_REGION_ALIASES = {
 }
 
 _lock = threading.Lock()
-# Last successful fetch: {"fetched_at": datetime, "found": bool, "days": {date: slots}, "emergency": bool}
-_latest: dict[str, Any] | None = None
+# Last successful fetch per source: {"fetched_at", "updated", "found", "days": {date: slots}}
+_latest: dict[str, dict[str, Any]] = {}
+_emergency = False
 
 
 def enabled() -> bool:
     return bool(settings.schedule_region and settings.schedule_queue)
 
 
+def _dtek_url() -> str:
+    if settings.schedule_dtek_url:
+        return settings.schedule_dtek_url
+    file = DTEK_FILES.get(settings.schedule_region)
+    return DTEK_URL.format(file=file) if file else ""
+
+
 def _store_path() -> Path:
     return Path(settings.data_dir) / "schedule.json"
 
 
-def _load_store() -> dict[str, list[dict[str, str]]]:
-    """Every version of each day's slots seen: {"2026-10-23": [{"from": iso, "slots": "0112…"}, …]}"""
+def _load_store() -> dict[str, dict[str, list[dict[str, str]]]]:
+    """Every version of each day's slots seen, per source:
+    {"dtek": {"2026-10-23": [{"from": iso, "slots": "0112…"}, …]}, "svitlo": {…}}"""
     try:
-        return json.loads(_store_path().read_text())
+        store = json.loads(_store_path().read_text())
     except FileNotFoundError:
         return {}
+    # Before DTEK was added, the file held svitlo.live's days only
+    if any(key[:1].isdigit() for key in store):
+        store = {"svitlo": store}
+    return store
 
 
-def _save_store(store: dict[str, list[dict[str, str]]]) -> None:
+def _save_store(store: dict[str, dict[str, list[dict[str, str]]]]) -> None:
     path = _store_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
@@ -61,7 +85,7 @@ def _get_json(url: str) -> dict[str, Any]:
         resp = client.get(url)
         resp.raise_for_status()
         data = resp.json()
-    # The DTEK proxy wraps its payload as a JSON string in "body"
+    # The DTEK proxy behind svitlo.live wraps its payload as a JSON string in "body"
     return json.loads(data["body"]) if isinstance(data.get("body"), str) else data
 
 
@@ -69,51 +93,104 @@ def _find_region(data: dict[str, Any], region: str) -> dict[str, Any] | None:
     return next((r for r in data.get("regions") or [] if r.get("cpu") == region), None)
 
 
+def _fetch_svitlo(now: datetime) -> dict[str, Any]:
+    """svitlo.live: {regions: [{cpu, schedule: {queue: {"YYYY-MM-DD": {"00:00": 0|1|2, …}}}}]}"""
+    region = _find_region(_get_json(settings.schedule_api_url), settings.schedule_region)
+    queue = ((region or {}).get("schedule") or {}).get(settings.schedule_queue)
+    days: dict[date, str] = {}
+    for day, slots in (queue or {}).items():
+        values = "".join(str(v) for _, v in sorted((slots or {}).items()))
+        if len(values) == 48 and values.strip("0"):
+            days[date.fromisoformat(day)] = values
+    # No update time in the data: when it was fetched
+    return {"fetched_at": now, "updated": now, "found": queue is not None, "days": days}
+
+
+def _fetch_dtek(now: datetime) -> dict[str, Any] | None:
+    """DTEK: {fact: {data: {<Kyiv midnight, unix>: {"GPV5.1": {"1": "yes", …, "24": …}}}, update}}"""
+    url = _dtek_url()
+    if not url:
+        return None  # region not covered
+    fact = _get_json(url).get("fact") or {}
+    data = fact.get("data")
+    queue_key = f"GPV{settings.schedule_queue}"
+    days: dict[date, str] = {}
+    found = False
+    for midnight, queues in (data.items() if isinstance(data, dict) else []):
+        hours = (queues or {}).get(queue_key)
+        if not hours:
+            continue
+        found = True
+        values = "".join(DTEK_HOUR_SLOTS.get(hours.get(str(h)), "11") for h in range(1, 25))
+        days[datetime.fromtimestamp(int(midnight), SCHEDULE_TZ).date()] = values
+    # DTEK's own "updated at", Kyiv time: "25.10.2026 10:02"
+    try:
+        updated = datetime.strptime(fact.get("update") or "", "%d.%m.%Y %H:%M").replace(tzinfo=SCHEDULE_TZ)
+    except ValueError:
+        updated = now
+    return {"fetched_at": now, "updated": updated, "found": found, "days": days}
+
+
 def _fetch_emergency(today: date) -> bool:
     """Emergency outages (ГАВ) in effect, per the DTEK proxy; False if unknown or stale."""
     if not settings.schedule_emergency_api_url:
         return False
-    try:
-        data = _get_json(settings.schedule_emergency_api_url)
-    except Exception:
-        return False
+    data = _get_json(settings.schedule_emergency_api_url)
     if data.get("date_today") != today.isoformat():
         return False  # it can lag a whole day behind; don't trust a stale flag
     region = _find_region(data, EMERGENCY_REGION_ALIASES.get(settings.schedule_region, settings.schedule_region))
     return bool((region or {}).get("emergency"))
 
 
-def refresh() -> dict[str, Any]:
-    """Fetch the schedule, record new versions of each day, and return it."""
-    global _latest
+def refresh() -> None:
+    """Fetch every source, recording new versions of each day. A failing source keeps its last
+    fetch; raises only if all of them failed."""
+    global _emergency
     now = datetime.now(timezone.utc)
     today = now.astimezone(SCHEDULE_TZ).date()
-    region = _find_region(_get_json(settings.schedule_api_url), settings.schedule_region)
-    queue = ((region or {}).get("schedule") or {}).get(settings.schedule_queue)
-    days: dict[date, str] = {}
-    for day, slots in (queue or {}).items():
-        values = "".join(str(v) for _, v in sorted((slots or {}).items()))
-        # All zeros = not published yet
-        if len(values) == 48 and values.strip("0"):
-            days[date.fromisoformat(day)] = values
-    latest = {"fetched_at": now, "found": queue is not None, "days": days, "emergency": _fetch_emergency(today)}
+    fetched: dict[str, dict[str, Any]] = {}
+    errors: list[Exception] = []
+    for source, fetch in (("dtek", _fetch_dtek), ("svitlo", _fetch_svitlo)):
+        try:
+            result = fetch(now)
+        except Exception as e:
+            errors.append(e)
+            continue
+        if result is not None:
+            fetched[source] = result
+    try:
+        emergency = _fetch_emergency(today)
+    except Exception:
+        emergency = False
 
     with _lock:
         store = _load_store()
         changed = False
-        for day, slots in days.items():
-            versions = store.setdefault(day.isoformat(), [])
-            if not versions or versions[-1]["slots"] != slots:
-                versions.append({"from": now.isoformat(), "slots": slots})
-                changed = True
+        for source, latest in fetched.items():
+            source_store = store.setdefault(source, {})
+            for day, slots in latest["days"].items():
+                versions = source_store.setdefault(day.isoformat(), [])
+                if not versions or versions[-1]["slots"] != slots:
+                    versions.append({"from": now.isoformat(), "slots": slots})
+                    changed = True
         oldest = (today - timedelta(days=KEEP_DAYS)).isoformat()
-        for day in [d for d in store if d < oldest]:
-            del store[day]
-            changed = True
+        for source_store in store.values():
+            for day in [d for d in source_store if d < oldest]:
+                del source_store[day]
+                changed = True
         if changed:
             _save_store(store)
-        _latest = latest
-    return latest
+        _latest.update(fetched)
+        _emergency = emergency
+    if errors and not fetched:
+        raise errors[0]
+
+
+def _choose(source: str | None) -> str:
+    """The requested source, or the default: DTEK if it has the queue, else svitlo.live."""
+    if source in SOURCES:
+        return source
+    return "dtek" if _latest.get("dtek", {}).get("found") else "svitlo"
 
 
 def _day_bounds(day: date) -> tuple[datetime, datetime]:
@@ -149,12 +226,16 @@ def _iso(runs: list[tuple[datetime, datetime]]) -> list[dict[str, str]]:
     return [{"start": s.isoformat(), "end": e.isoformat()} for s, e in runs]
 
 
-def get_schedule() -> dict[str, Any] | None:
-    """Current planned outage schedule, or None if not configured."""
+def get_schedule(source: str | None = None) -> dict[str, Any] | None:
+    """Current planned outage schedule from `source` (default: see _choose), or None if not
+    configured."""
     if not enabled():
         return None
     # Kept fresh by the poller in main.py; fetch here only before its first run
-    latest = _latest or refresh()
+    if not _latest:
+        refresh()
+    source = _choose(source)
+    latest = _latest.get(source) or {"fetched_at": None, "updated": None, "found": False, "days": {}}
     today = datetime.now(SCHEDULE_TZ).date()
 
     outages: list[tuple[datetime, datetime]] = []
@@ -162,7 +243,7 @@ def get_schedule() -> dict[str, Any] | None:
         for start, end in _slots_to_outages(slots, day):
             _append(outages, start, end)
 
-    # Always report today and tomorrow (unpublished if svitlo.live has nothing for them yet)
+    # Always report today and tomorrow (unpublished if there's nothing for them yet)
     published_days = {day: True for day in latest["days"]}
     for day in (today, today + timedelta(days=1)):
         published_days.setdefault(day, False)
@@ -178,26 +259,30 @@ def get_schedule() -> dict[str, Any] | None:
     ]
 
     return {
+        "source": source,
+        # Sources that have this region/queue, for switching between them
+        "sources": [s for s in SOURCES if _latest.get(s, {}).get("found")],
         "queue": settings.schedule_queue,
         "region": settings.schedule_region,
         # Emergency outages are in effect and the schedule may not be followed
-        "emergency": latest["emergency"],
+        "emergency": _emergency,
         "available": latest["found"],
-        "updated": latest["fetched_at"].isoformat(),
+        "updated": latest["updated"].isoformat() if latest["updated"] else None,
         "days": days,
         "outages": _iso(outages),
     }
 
 
-def get_schedule_history(start: datetime, end: datetime) -> dict[str, Any] | None:
-    """Past schedule as it was in effect, from the recorded versions, for the part of start..end
-    before today's Kyiv midnight; from today on, the current schedule (get_schedule) is used
-    instead. Only known since this app started recording. None if no schedule is configured."""
+def get_schedule_history(start: datetime, end: datetime, source: str | None = None) -> dict[str, Any] | None:
+    """Past schedule from `source` as it was in effect, from the recorded versions, for the part
+    of start..end before today's Kyiv midnight; from today on, the current schedule
+    (get_schedule) is used instead. Only known since this app started recording. None if no
+    schedule is configured."""
     if not enabled():
         return None
     cutoff = min(end, datetime.combine(datetime.now(SCHEDULE_TZ).date(), time(0), SCHEDULE_TZ))
     with _lock:
-        store = _load_store()
+        store = _load_store().get(_choose(source), {})
     covered: list[tuple[datetime, datetime]] = []
     outages: list[tuple[datetime, datetime]] = []
     for day_str in sorted(store):

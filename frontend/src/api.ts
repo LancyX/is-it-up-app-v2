@@ -33,6 +33,9 @@ export interface LastChange {
 
 export interface Schedule {
   enabled: boolean
+  // Where this schedule comes from, and the sources that have this region/queue
+  source?: ScheduleSource
+  sources?: ScheduleSource[]
   queue?: string
   region?: string
   emergency?: boolean
@@ -43,6 +46,8 @@ export interface Schedule {
   // Planned outages, merged across days
   outages?: Array<{ start: string; end: string }>
 }
+
+export type ScheduleSource = 'dtek' | 'svitlo'
 
 async function request<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`)
@@ -57,11 +62,17 @@ export async function fetchState(): Promise<State> {
   return request<State>('/state')
 }
 
-export async function fetchHistory(range: HistoryRange): Promise<History> {
-  if (typeof range === 'number') return request<History>(`/history?hours=${range}`)
-  const { start, end, live } = getRangeBounds(range, Date.now())
-  const params = new URLSearchParams({ start: new Date(start).toISOString() })
-  if (!live) params.set('end', new Date(end).toISOString())
+// `scheduleSource`: whose past schedule to include (null = the backend's default)
+export async function fetchHistory(range: HistoryRange, scheduleSource: ScheduleSource | null): Promise<History> {
+  const params = new URLSearchParams()
+  if (typeof range === 'number') {
+    params.set('hours', String(range))
+  } else {
+    const { start, end, live } = getRangeBounds(range, Date.now())
+    params.set('start', new Date(start).toISOString())
+    if (!live) params.set('end', new Date(end).toISOString())
+  }
+  if (scheduleSource) params.set('schedule_source', scheduleSource)
   return request<History>(`/history?${params}`)
 }
 
@@ -69,6 +80,6 @@ export async function fetchLastChange(): Promise<LastChange | null> {
   return request<LastChange | null>('/last-change')
 }
 
-export async function fetchSchedule(): Promise<Schedule> {
-  return request<Schedule>('/schedule')
+export async function fetchSchedule(source: ScheduleSource | null): Promise<Schedule> {
+  return request<Schedule>(source ? `/schedule?source=${source}` : '/schedule')
 }

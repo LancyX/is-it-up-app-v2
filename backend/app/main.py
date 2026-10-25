@@ -84,6 +84,7 @@ async def get_history(
     hours: int | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
+    schedule_source: str | None = None,
 ):
     """State change history for the grid entity (time series for chart).
 
@@ -112,7 +113,7 @@ async def get_history(
     try:
         data = await run_sync(ha_client.get_history, start, end)
         try:
-            schedule_history = await run_sync(schedule.get_schedule_history, start, end)
+            schedule_history = await run_sync(schedule.get_schedule_history, start, end, schedule_source)
         except Exception:
             schedule_history = None  # optional: never fail the grid history because of it
         return {
@@ -145,10 +146,11 @@ async def get_last_change():
 
 
 @app.get("/api/schedule")
-async def get_schedule():
-    """Planned outage schedule (svitlo.live); `{"enabled": false}` if not configured."""
+async def get_schedule(source: str | None = None):
+    """Planned outage schedule (`source`: dtek / svitlo, default dtek if it has the queue);
+    `{"enabled": false}` if not configured."""
     try:
-        data = await run_sync(schedule.get_schedule)
+        data = await run_sync(schedule.get_schedule, source)
         return {"enabled": False} if data is None else {"enabled": True, **data}
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"svitlo.live error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Schedule error: {str(e)}")

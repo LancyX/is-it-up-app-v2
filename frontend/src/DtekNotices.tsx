@@ -7,15 +7,20 @@ interface DtekNoticesProps {
   emergency: boolean
 }
 
-const KNOWN_STATUSES = ['emergency', 'planned', 'stabilization']
+const KNOWN_STATUSES = ['emergency', 'planned']
+// DTEK's address status during an ordinary scheduled outage ("Стабілізаційне відключення (Згідно
+// графіку погодинних відключень)"): the schedule card already shows it, so it's not an alert
+const SCHEDULED = ['ok', 'stabilization']
 
 // What DTEK reports, only when it reports something; the two happen independently:
 // - emergency outages in the region (the schedule may not be followed);
-// - an outage registered for the address, with its estimated restoration (nothing when the
-//   integration can't reach DTEK: the status may be stale then).
+// - an outage registered for the address other than the scheduled one, with its estimated
+//   restoration (nothing when the integration can't reach DTEK: the status may be stale then).
 export function DtekNotices({ address, emergency }: DtekNoticesProps) {
   const { t, locale } = useTranslations()
-  const status = address?.enabled && address.connected && address.status !== 'ok' ? address.status : null
+  const status = address?.enabled && address.connected && address.status && !SCHEDULED.includes(address.status)
+      ? address.status
+      : null
   if (!emergency && !status) return null
 
   const formatTime = (iso: string) => {

@@ -26,7 +26,7 @@ Home Assistant knows when the power goes out, but you don't want to give neighbo
 
 - **Current state** — on / off and for how long, plus the last change and how long the previous state lasted. Short `unavailable` blips in HA (e.g. while a template sensor reloads) don't break an outage into pieces.
 - **Outage schedule** (optional) — today and tomorrow as an hour grid like DTEK's (each hour split into half-hours), the next scheduled outage with a countdown.
-- **DTEK alerts** (optional) — banners when emergency outages are in effect in the region (the schedule may not be followed), and when DTEK reports an emergency, planned or scheduled outage at your address, with its estimated restoration. The two happen independently, so either or both can show.
+- **DTEK alerts** (optional) — banners when emergency outages are in effect in the region (the schedule may not be followed), and when DTEK reports an emergency outage or planned works at your address, with its estimated restoration (ordinary scheduled outages are already in the schedule card). The two happen independently, so either or both can show.
 - **Actual history** — today, yesterday, or the last 6 h … 7 days, with availability, total time without power, number of outages and their average length.
   - On a computer: a step chart with a **Plan** lane under it, so you can see at a glance whether outages followed the schedule.
   - On a phone: two compact lanes, **Actual** and **Plan**, on one time scale. Turn the phone to landscape to get the full chart.
@@ -51,7 +51,7 @@ Browser ──► nginx (frontend, :3033) ──/api──► FastAPI (backend, 
   - every version of each day it sees is saved to `data/schedule.json` (a Docker volume), so past days show the schedule as it was in effect at the time — including changes during the day. That history starts when you first run the app with the schedule configured;
   - whether emergency outages are in effect in the region comes from the DTEK proxy behind svitlo.live — the only place that flag is published (ignored when it's out of date).
 
-- **What DTEK reports for your address** (optional) — from the [DTEK Monitor](https://github.com/groove-max/ha-dtek-monitor) HACS integration (Kyiv region and other DTEK regions; it looks up your address on DTEK's site): an emergency / planned / scheduled outage with DTEK's estimated restoration time, shown as a banner. Nothing is shown when DTEK reports nothing — accidents announced elsewhere don't necessarily show up there (nor in DTEK's bot).
+- **What DTEK reports for your address** (optional) — from the [DTEK Monitor](https://github.com/groove-max/ha-dtek-monitor) HACS integration (Kyiv region and other DTEK regions; it looks up your address on DTEK's site): an emergency outage or planned works with DTEK's estimated restoration time, shown as a banner (an ordinary scheduled outage isn't, it's in the schedule card). Nothing is shown when DTEK reports nothing — accidents announced elsewhere don't necessarily show up there (nor in DTEK's bot).
 
 ## Setup
 

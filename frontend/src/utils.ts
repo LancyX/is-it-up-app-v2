@@ -19,18 +19,20 @@ export function normalizeState(state: string | null | undefined): GridState {
   return s === 'on' || s === 'off' ? s : 'unknown'
 }
 
-// Rolling window of N hours ending now, or a calendar day in the browser's timezone
-export type HistoryRange = number | 'today' | 'yesterday'
+// A calendar day in the browser's timezone, as days back from today: 0 = today, 1 = yesterday, …
+export type HistoryRange = number
+// Days to pick from (today included); HA keeps 10 days by default (purge_keep_days)
+export const HISTORY_DAYS = 7
 
-// `live` = the range ends now, so the current state applies at its end
-export function getRangeBounds(range: HistoryRange, now: number): { start: number; end: number; live: boolean } {
-  if (typeof range === 'number') return { start: now - range * 60 * 60 * 1000, end: now, live: true }
-  const midnight = new Date(now)
-  midnight.setHours(0, 0, 0, 0)
-  if (range === 'today') return { start: midnight.getTime(), end: now, live: true }
-  const yesterday = new Date(midnight)
-  yesterday.setDate(yesterday.getDate() - 1) // not -24h: a DST-change day is 23 or 25 hours
-  return { start: yesterday.getTime(), end: midnight.getTime(), live: false }
+// `live` = the range ends now (today), so the current state applies at its end
+export function getRangeBounds(daysAgo: HistoryRange, now: number): { start: number; end: number; live: boolean } {
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - daysAgo) // not -24h: a DST-change day is 23 or 25 hours
+  if (daysAgo === 0) return { start: start.getTime(), end: now, live: true }
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  return { start: start.getTime(), end: end.getTime(), live: false }
 }
 
 export interface Interval {

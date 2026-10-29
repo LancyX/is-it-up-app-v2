@@ -4,6 +4,7 @@ import { useTranslations } from './i18n'
 import './App.css'
 import { fetchState, fetchHistory, fetchLastChange, fetchSchedule, fetchAddress } from './api'
 import type { State, History, LastChange, Schedule, AddressStatus } from './api'
+import { HISTORY_DAYS, getRangeBounds } from './utils'
 import type { HistoryRange } from './utils'
 import { StateCard } from './StateCard'
 import { HistoryChart } from './HistoryChart'
@@ -25,7 +26,7 @@ function App() {
   const [address, setAddress] = useState<AddressStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [historyRange, setHistoryRange] = useState<HistoryRange>('today')
+  const [historyRange, setHistoryRange] = useState<HistoryRange>(0)
   const [contactsOpen, setContactsOpen] = useState(false)
 
   const load = async () => {
@@ -138,20 +139,18 @@ function App() {
               </div>
               <select
                 value={historyRange}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setHistoryRange(v === 'today' || v === 'yesterday' ? v : Number(v))
-                }}
+                onChange={(e) => setHistoryRange(Number(e.target.value))}
                 className="hours-select"
               >
-                <option value="today">{t('history.today')}</option>
-                <option value="yesterday">{t('history.yesterday')}</option>
-                <option value={6}>{t('history.hours6')}</option>
-                <option value={12}>{t('history.hours12')}</option>
-                <option value={24}>{t('history.hours24')}</option>
-                <option value={48}>{t('history.hours48')}</option>
-                <option value={72}>{t('history.days3')}</option>
-                <option value={168}>{t('history.days7')}</option>
+                {Array.from({ length: HISTORY_DAYS }, (_, daysAgo) => (
+                  <option key={daysAgo} value={daysAgo}>
+                    {/* Dates for all, today too, so none stands out */}
+                    {new Date(getRangeBounds(daysAgo, Date.now()).start).toLocaleDateString(
+                      locale === 'uk' ? 'uk-UA' : 'en',
+                      { weekday: 'short', day: 'numeric', month: 'short' },
+                    )}
+                  </option>
+                ))}
               </select>
             </div>
             <HistoryChart

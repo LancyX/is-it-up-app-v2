@@ -228,7 +228,7 @@ export function HistoryChart({
   const { t, locale } = useTranslations()
   const isPhone = useMediaQuery(PHONE_QUERY)
 
-  // `now` is the end of the visible range: the real current time, or midnight for 'yesterday'
+  // `now` is the end of the visible range: the real current time today, else the day's end
   const { start: minTime, end: now, live } = getRangeBounds(historyRange, Date.now())
 
   // 1. Generate boundary-aligned timeline: each point starts a segment lasting until the next point
@@ -452,7 +452,7 @@ export function HistoryChart({
     )
   }
 
-  // `now - 1`: 'yesterday' ends exactly at midnight, which is still the same day
+  // `now - 1`: a past day ends exactly at midnight, which is still the same day
   const differentDays = new Date(minTime).toDateString() !== new Date(now - 1).toDateString()
 
   const formatTime = (time: number) => {

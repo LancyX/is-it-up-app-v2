@@ -27,7 +27,7 @@ Home Assistant knows when the power goes out, but you don't want to give neighbo
 - **Current state** — on / off and for how long, plus the last change and how long the previous state lasted. Short `unavailable` blips in HA (e.g. while a template sensor reloads) don't break an outage into pieces.
 - **Outage schedule** (optional) — today and tomorrow as an hour grid like DTEK's (each hour split into half-hours), the next scheduled outage with a countdown.
 - **DTEK alerts** (optional) — banners when emergency outages are in effect in the region (the schedule may not be followed), and when DTEK reports an emergency outage or planned works at your address, with its estimated restoration (ordinary scheduled outages are already in the schedule card). The two happen independently, so either or both can show.
-- **Actual history** — today, yesterday, or the last 6 h … 7 days, with availability, total time without power, number of outages and their average length.
+- **Actual history** — one calendar day at a time (any of the last 7 days, picked by date), with availability, total time without power, number of outages and their average length.
   - On a computer: a step chart with a **Plan** lane under it, so you can see at a glance whether outages followed the schedule.
   - On a phone: two compact lanes, **Actual** and **Plan**, on one time scale. Turn the phone to landscape to get the full chart.
   - **All periods** — an expandable list with every on/off period in the range: start – end, state, duration.
@@ -124,7 +124,7 @@ npm run build   # tsc + vite build — the only type check
 | `GET /health` | Health check |
 | `GET /api/state` | Current state of the grid sensor |
 | `GET /api/last-change` | Last on/off change and how long the previous state lasted (ignoring `unavailable` blips) |
-| `GET /api/history?hours=N` | State changes for a rolling window, `N` ∈ 6, 12, 24, 48, 72, 168 |
+| `GET /api/history?hours=N` | State changes for a rolling window, `N` ∈ 6, 12, 24, 48, 72, 168 (not used by the UI, which asks for calendar days) |
 | `GET /api/history?start=<ISO>[&end=<ISO>]` | Same for a fixed window (with a timezone offset; max 168 h; `end` defaults to now). Includes `schedule_history` — the recorded schedule before today — when a schedule is configured |
 | `GET /api/schedule` | DTEK's planned outages for today and tomorrow (Kyiv time), DTEK's update time and the region's emergency flag; `{"enabled": false}` if not configured |
 | `GET /api/address` | What DTEK reports for the address (DTEK Monitor): status, description, start, estimated restoration; `{"enabled": false}` if not configured |

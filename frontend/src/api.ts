@@ -73,14 +73,9 @@ export async function fetchState(): Promise<State> {
 }
 
 export async function fetchHistory(range: HistoryRange): Promise<History> {
-  const params = new URLSearchParams()
-  if (typeof range === 'number') {
-    params.set('hours', String(range))
-  } else {
-    const { start, end, live } = getRangeBounds(range, Date.now())
-    params.set('start', new Date(start).toISOString())
-    if (!live) params.set('end', new Date(end).toISOString())
-  }
+  const { start, end, live } = getRangeBounds(range, Date.now())
+  const params = new URLSearchParams({ start: new Date(start).toISOString() })
+  if (!live) params.set('end', new Date(end).toISOString())
   return request<History>(`/history?${params}`)
 }
 
